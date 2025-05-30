@@ -1,0 +1,112 @@
+-- Таблица Decoding (Расшифровка)
+INSERT INTO decoding (full_name, short_name) VALUES
+('Муниципальное бюджетное учреждение культуры города Абакана «Абаканская централизованная библиотечная система»', 'МБУК «АЦБС»');
+
+-- Таблица Role (Роли)
+INSERT INTO role (name) VALUES
+('admin'),
+('user');
+
+-- Таблица User (Пользователи)
+INSERT INTO "user" (username, password, role_id) VALUES
+('admin', crypt('admin', gen_salt('bf')), 1);
+
+
+-- Таблица Institution (Учреждения)
+INSERT INTO institution (name, decoding_id, user_id) VALUES
+('Отдел обслуживания читателей Центральной городской библиотеки', 1, 1),
+('Сектор нестационарного обслуживания детей отдела обслуживания читателей Центральной городской библиотеки', 1, 1),
+('Сектор нестационарного обслуживания отдела обслуживания читателей Центральной городской библиотеки', 1, 1),
+('Центральная городская детская библиотека', 1, 1),
+('Библиотека-филиал №2', 1, 1),
+('Библиотека-филиал №4', 1, 1),
+('Библиотека-филиал №5', 1, 1),
+('Библиотека-филиал №6 «Истоки»', 1, 1),
+('Библиотека-филиал №7 «Росток»', 1, 1),
+('Юношеская библиотека-филиал «Ровесник»', 1, 1),
+('Детская библиотека-филиал №9', 1, 1),
+('Детская библиотека-филиал №10', 1, 1),
+('Детская библиотека-филиал №11', 1, 1),
+('Библиотека-филиал №12', 1, 1),
+('Детская библиотека-филиал №13', 1, 1),
+('Библиотека-филиал №14', 1, 1);
+
+-- Таблица EventFormat (Форматы мероприятий)
+INSERT INTO event_format (name) VALUES
+('Стационарные (в библиотеке)'),
+('Внестационарные'),
+('Удаленные (в онлайн формате)');
+
+-- Таблица EventClassification (Классификации)
+INSERT INTO event_classification (name) VALUES
+('Культурно-просветительское'),
+('Информационное'),
+('Образовательное'),
+('Досуговое'),
+('Рекламно-маркетинговое');
+
+-- Таблица ActivityDirection (Направления деятельности)
+INSERT INTO activity_direction (name) VALUES
+('Содействие духовному развитию личности и нравственному воспитанию'),
+('Педагогика, Этика, Культура поведения'),
+('Летние чтения – 2025'),
+('Пропаганда художественной литературы'),
+('Эстетическое воспитание'),
+('В помощь школьной программе, День знаний'),
+('Продвижение исторических знаний'),
+('Патриотическое воспитание'),
+('Формирование правовой культуры'),
+('Развитие толерантности и культуры межнационального общения'),
+('Здоровый образ жизни'),
+('Спорт'),
+('Молодежная политика. Социализация личности. Профориентация'),
+('Наука и техника'),
+('Экологическое просвещение'),
+('Краеведение. Градоведение'),
+('Мероприятия по формированию информационной культуры пользователей');
+
+-- Таблица TargetAudience (Целевая аудитория)
+INSERT INTO target_audience (name) VALUES
+('Дети'),
+('Взрослые'),
+('Подростки'),
+('Все');
+
+-- Таблица Venue (Места проведения)
+INSERT INTO venue (name) VALUES
+('Центральная городская библиотека'),
+('Библиотека-филиал №2'),
+('Открытая площадка'),
+('Онлайн');
+
+-- Таблица EventType (Типы мероприятий) - добавляем базовый тип
+INSERT INTO event_type (name) VALUES
+('Основной');
+
+-- Таблица Event (Мероприятия) и Attendance (Посещаемость)
+-- Мероприятие 1
+INSERT INTO event (date, venue_id, organizer_id, format_id, name, description, target_audience_id, classification_id, direction_id, event_type_id) VALUES
+('2025-05-01', 1, 1, 1, 'Литературный вечер', 'Вечер чтения классической литературы', 1, 1, 1, 1);
+
+INSERT INTO attendance (event_id, institution_id, total_attendees, child_attendees, volunteers, at_risk_teens) VALUES
+((SELECT id FROM event WHERE name = 'Литературный вечер'), 1, 50, 20, 5, 2);
+
+-- Мероприятие 2
+INSERT INTO event (date, venue_id, organizer_id, format_id, name, description, target_audience_id, classification_id, direction_id, event_type_id) VALUES
+('2025-05-02', 2, 2, 2, 'Экологический квест', 'Квест на тему экологии', 1, 2, 15, 1);
+
+INSERT INTO attendance (event_id, institution_id, total_attendees, child_attendees, volunteers, at_risk_teens) VALUES
+((SELECT id FROM event WHERE name = 'Экологический квест'), 2, 30, 15, 3, 1);
+
+-- Мероприятие 3
+INSERT INTO event (date, venue_id, organizer_id, format_id, name, description, target_audience_id, classification_id, direction_id, event_type_id) VALUES
+('2025-05-03', 3, 3, 3, 'Онлайн-лекция по истории', 'Лекция о местной истории', 3, 3, 7, 1);
+
+INSERT INTO attendance (event_id, institution_id, total_attendees, child_attendees, volunteers, at_risk_teens) VALUES
+((SELECT id FROM event WHERE name = 'Онлайн-лекция по истории'), 3, 40, 0, 2, 0);
+
+-- Данные о посещении библиотеки (используем Attendance с event_id = NULL)
+INSERT INTO attendance (event_id, institution_id, total_attendees, child_attendees, volunteers, at_risk_teens) VALUES
+(NULL, 1, 100, 40, 0, 0), -- Посещения библиотеки 2025-05-01
+(NULL, 2, 80, 30, 0, 0),  -- Посещения библиотеки 2025-05-02
+(NULL, 3, 120, 50, 0, 0); -- Посещения библиотеки 2025-05-03
