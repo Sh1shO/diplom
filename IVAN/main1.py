@@ -1,18 +1,18 @@
 import sys
 import logging
-from datetime import date
+from datetime import date, timedelta
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTableWidget,
     QLineEdit, QPushButton, QListWidget, QStackedWidget, QLabel, QComboBox,
     QTableWidgetItem, QMessageBox, QDialog, QFormLayout, QDateEdit, QHeaderView,
     QTabWidget, QTableView, QGroupBox, QFileDialog, QSizePolicy, QCheckBox,
-    QSpacerItem, QListWidgetItem
+    QSpacerItem, QListWidgetItem, QMenuBar, QMenu, QInputDialog
 )
-from PySide6.QtCore import Qt, QDate
+from PySide6.QtCore import Qt, QDate, QTimer
 from PySide6.QtGui import QIcon, QPixmap, QStandardItemModel, QStandardItem, QBrush, QColor
 from sqlalchemy.orm import joinedload
 from db import (
-    User, Unit, ProductType, DeliveryCondition, Supplier, Product, Delivery,
+    User, Role, Unit, ProductType, DeliveryCondition, Supplier, Product, Delivery,
     ProductInDelivery, Session
 )
 from styles import STYLESHEET
@@ -25,7 +25,12 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.lib.units import mm
 
 # Настройка логирования
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    filename='app.log',
+    filemode='a'
+)
 
 class LoginDialog(QDialog):
     def __init__(self):
@@ -152,6 +157,9 @@ class AddEditDeliveryDialog(QDialog):
         self.actual_date_check = QCheckBox("Указать факт. дату")
         self.doc_number = QLineEdit()
         self.doc_number.setFixedHeight(35)
+        self.doc_date = QDateEdit(QDate.currentDate())
+        self.doc_date.setCalendarPopup(True)
+        self.doc_date.setFixedHeight(35)
         with Session() as s:
             suppliers = s.query(Supplier).all()
             self.supplier.addItem("Выберите", None)
@@ -165,11 +173,13 @@ class AddEditDeliveryDialog(QDialog):
                     self.actual_date_check.setChecked(True)
                     self.actual_date.setEnabled(True)
                 self.doc_number.setText(delivery.doc_number or "")
+                self.doc_date.setDate(delivery.doc_date or QDate.currentDate())
         form_layout.addRow("Поставщик:", self.supplier)
         form_layout.addRow("План. дата:", self.planned_date)
         form_layout.addRow("", self.actual_date_check)
         form_layout.addRow("Факт. дата:", self.actual_date)
         form_layout.addRow("Номер док.:", self.doc_number)
+        form_layout.addRow("Дата док.:", self.doc_date)
         layout.addLayout(form_layout)
         self.actual_date_check.toggled.connect(self.actual_date.setEnabled)
         self.products_table = QTableWidget()
@@ -196,9 +206,9 @@ class AddEditDeliveryDialog(QDialog):
                         combo.setCurrentIndex(combo.findData(pid.product_id))
                     self.products_table.setCellWidget(row, 0, combo)
                     self.products_table.setItem(row, 1, QTableWidgetItem(str(pid.planned_quantity or 0)))
-                    self.products_table.setItem(row, 2, QTableWidgetItem(f"{pid.planned_price or 0:.2f}"))
+                    self.products_table.setItem(row, 2, QTableWidgetItem(f"{pid.planned_price or 0}"))
                     self.products_table.setItem(row, 3, QTableWidgetItem(str(pid.actual_quantity or 0)))
-                    self.products_table.setItem(row, 4, QTableWidgetItem(f"{pid.actual_price or 0:.2f}"))
+                    self.products_table.setItem(row, 4, QTableWidgetItem(f"{pid.actual_price or 0}"))
                     self.products_table.setRowHeight(row, 50)
                 for row in range(self.products_table.rowCount()):
                     self.products_table.setRowHeight(row, 50)
@@ -229,9 +239,9 @@ class AddEditDeliveryDialog(QDialog):
                 combo.addItem(p.name, p.id)
         self.products_table.setCellWidget(row, 0, combo)
         self.products_table.setItem(row, 1, QTableWidgetItem("0"))
-        self.products_table.setItem(row, 2, QTableWidgetItem("0.00"))
+        self.products_table.setItem(row, 2, QTableWidgetItem("0"))
         self.products_table.setItem(row, 3, QTableWidgetItem("0"))
-        self.products_table.setItem(row, 4, QTableWidgetItem("0.00"))
+        self.products_table.setItem(row, 4, QTableWidgetItem("0"))
         self.products_table.setRowHeight(row, 50)
 
     def remove_product_row(self):
@@ -251,12 +261,12 @@ class AddEditDeliveryDialog(QDialog):
                 continue
             try:
                 planned_qty = int(self.products_table.item(row, 1).text() or 0)
-                planned_price = float(self.products_table.item(row, 2).text() or 0)
+                planned_price = int(self.products_table.item(row, 2).text() or 0)
                 actual_qty = int(self.products_table.item(row, 3).text() or 0)
-                actual_price = float(self.products_table.item(row, 4).text() or 0)
+                actual_price = int(self.products_table.item(row, 4).text() or 0)
             except ValueError as e:
                 logging.error(f"Ошибка парсинга данных таблицы: {e}")
-                planned_qty, planned_price, actual_qty, actual_price = 0, 0.0, 0, 0.0
+                planned_qty, planned_price, actual_qty, actual_price = 0, 0, 0, 0
             products.append({
                 'product_id': product_id,
                 'planned_quantity': planned_qty,
@@ -269,8 +279,120 @@ class AddEditDeliveryDialog(QDialog):
             'planned_date': self.planned_date.date().toPython(),
             'actual_date': self.actual_date.date().toPython() if self.actual_date_check.isChecked() else None,
             'doc_number': self.doc_number.text().strip(),
+            'doc_date': self.doc_date.date().toPython(),
             'products': products
         }
+
+class SettingsDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Настройки")
+        self.setWindowIcon(QIcon("./logo.svg"))
+        self.setMinimumSize(600, 400)
+        layout = QVBoxLayout(self)
+        self.tabs = QTabWidget()
+        layout.addWidget(self.tabs)
+
+        # Вкладка "Назначение ролей"
+        role_tab = QWidget()
+        role_layout = QVBoxLayout(role_tab)
+        role_layout.setSpacing(10)
+        role_layout.setContentsMargins(20, 20, 20, 20)
+        add_user_btn = QPushButton("Добавить сотрудника")
+        add_user_btn.setFixedHeight(35)
+        add_user_btn.clicked.connect(self.add_employee)
+        role_layout.addWidget(add_user_btn)
+        self.user_table = QTableWidget()
+        self.user_table.setColumnCount(3)
+        self.user_table.setHorizontalHeaderLabels(["Имя пользователя", "Роль", "ID роли"])
+        self.user_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.user_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        role_layout.addWidget(self.user_table)
+        self.tabs.addTab(role_tab, "Назначение ролей")
+        self.update_user_table()
+
+        # Вкладка "Статистика"
+        stats_tab = QWidget()
+        stats_layout = QVBoxLayout(stats_tab)
+        stats_layout.setSpacing(10)
+        stats_layout.setContentsMargins(20, 20, 20, 20)
+        self.stats_label = QLabel()
+        stats_layout.addWidget(self.stats_label)
+        stats_layout.addSpacerItem(QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding))
+        self.tabs.addTab(stats_tab, "Статистика")
+        self.update_statistics()
+
+        # Вкладка "О приложении"
+        about_tab = QWidget()
+        about_layout = QVBoxLayout(about_tab)
+        about_layout.setSpacing(10)
+        about_layout.setContentsMargins(20, 20, 20, 20)
+        about_text = (
+            "Название: Deliveries\n"
+            "Версия: 1.0.0\n"
+            "Разработчик: xAI\n"
+            "Дата выпуска: 02.06.2025"
+        )
+        about_label = QLabel(about_text)
+        about_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+        about_layout.addWidget(about_label)
+        about_layout.addSpacerItem(QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding))
+        self.tabs.addTab(about_tab, "О приложении")
+
+        close_button = QPushButton("Закрыть")
+        close_button.setFixedHeight(35)
+        close_button.clicked.connect(self.accept)
+        layout.addWidget(close_button)
+
+    def add_employee(self):
+        username, ok = QInputDialog.getText(self, "Добавить сотрудника", "Имя пользователя:")
+        if not ok or not username.strip():
+            return
+        password, ok = QInputDialog.getText(self, "Добавить сотрудника", "Пароль:", QLineEdit.Password)
+        if not ok or not password.strip():
+            return
+        with Session() as s:
+            try:
+                if s.query(User).filter_by(username=username).first():
+                    QMessageBox.critical(self, "Ошибка", "Пользователь с таким именем уже существует")
+                    return
+                employee_role = s.query(Role).filter_by(name='employee').first()
+                if not employee_role:
+                    QMessageBox.critical(self, "Ошибка", "Роль 'employee' не найдена в базе данных")
+                    return
+                s.add(User(
+                    username=username,
+                    password=password,
+                    role_id=employee_role.id
+                ))
+                s.commit()
+                self.update_user_table()
+                logging.info(f"Добавлен сотрудник: {username}")
+                QMessageBox.information(self, "Успех", "Сотрудник успешно добавлен")
+            except Exception as e:
+                s.rollback()
+                logging.error(f"Ошибка добавления сотрудника: {e}")
+                QMessageBox.critical(self, "Ошибка", f"Не удалось добавить сотрудника: {str(e)}")
+
+    def update_user_table(self):
+        with Session() as s:
+            users = s.query(User).options(joinedload(User.role)).all()
+            self.user_table.setRowCount(len(users))
+            for row, user in enumerate(users):
+                self.user_table.setItem(row, 0, QTableWidgetItem(user.username))
+                self.user_table.setItem(row, 1, QTableWidgetItem(user.role.name if user.role else ""))
+                self.user_table.setItem(row, 2, QTableWidgetItem(str(user.role_id or "")))
+                self.user_table.setRowHeight(row, 50)
+
+    def update_statistics(self):
+        with Session() as s:
+            delivery_count = s.query(Delivery).count()
+            product_count = s.query(ProductInDelivery).count()
+            stats_text = (
+                f"Общее количество поставок: {delivery_count}\n"
+                f"Общее количество товаров в поставках: {product_count}"
+            )
+            self.stats_label.setText(stats_text)
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -283,13 +405,22 @@ class MainWindow(QMainWindow):
         self.show_login_dialog()
 
     def show_login_dialog(self):
+        self.current_user = None  # Очистка текущего пользователя
         dialog = LoginDialog()
         if dialog.exec_():
             username, password = dialog.get_credentials()
             with Session() as s:
-                user = s.query(User).filter_by(username=username, password=password).first()
+                user = s.query(User).options(joinedload(User.role)).filter_by(username=username, password=password).first()
                 if user:
+                    if not user.role:
+                        # Принудительно загрузим роль
+                        user.role = s.query(Role).get(user.role_id)
+                        if not user.role:
+                            logging.error(f"Роль с role_id={user.role_id} не найдена для пользователя {username}")
+                            QMessageBox.critical(self, "Ошибка", "Роль пользователя не найдена")
+                            return
                     self.current_user = user
+                    logging.info(f"Авторизация: username={username}, role_id={user.role_id}, role_name={user.role.name}")
                     self.setup_ui()
                 else:
                     QMessageBox.critical(self, "Ошибка", "Неверный логин или пароль")
@@ -299,18 +430,38 @@ class MainWindow(QMainWindow):
         central = QWidget()
         self.setCentralWidget(central)
         main_layout = QHBoxLayout(central)
+
+        # Меню настроек для админа
+        logging.info(f"Проверка роли: role_name={self.current_user.role.name if self.current_user.role else 'None'}")
+        if self.current_user.role and self.current_user.role.name.lower() == 'admin':
+            menubar = self.menuBar()
+            settings_menu = menubar.addMenu("Настройки")
+            settings_action = settings_menu.addAction("Открыть настройки")
+            settings_action.triggered.connect(self.open_settings)
+            logging.info("Добавлено меню настроек для администратора")
+        else:
+            logging.info("Меню настроек не добавлено: пользователь не администратор")
+
         left_panel = QWidget()
         left_layout = QVBoxLayout(left_panel)
         self.tabs = QTabWidget()
         self.tabs.currentChanged.connect(self.on_tab_changed)
         left_layout.addWidget(self.tabs)
-        ref_tab = QWidget()
-        ref_layout = QVBoxLayout(ref_tab)
-        self.ref_list = QListWidget()
-        self.ref_list.addItems(["Единицы измерения", "Типы товаров", "Условия поставки", "Поставщики", "Товары"])
-        self.ref_list.currentItemChanged.connect(self.show_reference)
-        ref_layout.addWidget(self.ref_list)
-        self.tabs.addTab(ref_tab, "Справочники")
+
+        # Вкладка "Справочники" только для админа
+        if self.current_user.role and self.current_user.role.name.lower() == 'admin':
+            ref_tab = QWidget()
+            ref_layout = QVBoxLayout(ref_tab)
+            self.ref_list = QListWidget()
+            self.ref_list.addItems(["Единицы измерения", "Типы товаров", "Условия поставки", "Поставщики", "Товары"])
+            self.ref_list.currentItemChanged.connect(self.show_reference)
+            ref_layout.addWidget(self.ref_list)
+            self.tabs.addTab(ref_tab, "Справочники")
+            logging.info("Добавлена вкладка Справочники для администратора")
+        else:
+            logging.info("Вкладка Справочники не добавлена: пользователь не администратор")
+
+        # Вкладка "Поставки"
         delivery_tab = QWidget()
         delivery_layout = QVBoxLayout(delivery_tab)
         filters_group = QGroupBox("")
@@ -370,6 +521,8 @@ class MainWindow(QMainWindow):
         self.delivery_end_date.dateChanged.connect(self.update_deliveries)
         self.delivery_supplier_filter.currentIndexChanged.connect(self.update_deliveries)
         self.tabs.addTab(delivery_tab, "Поставки")
+
+        # Вкладка "Отчёты"
         report_tab = QWidget()
         report_layout = QHBoxLayout(report_tab)
         filters = QWidget()
@@ -463,6 +616,37 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.right_panel, 3)
         self.right_panel.addWidget(QWidget())
         self.update_deliveries()
+
+        # Таймер для уведомлений
+        self.notification_timer = QTimer(self)
+        self.notification_timer.timeout.connect(self.show_upcoming_deliveries_notification)
+        self.notification_timer.start(3600 * 1000)  # Каждые 60 минут
+        self.show_upcoming_deliveries_notification()
+
+    def show_upcoming_deliveries_notification(self):
+        today = date.today()
+        in_three_days = today + timedelta(days=3)
+        with Session() as s:
+            upcoming_deliveries = s.query(Delivery).options(joinedload(Delivery.supplier)).filter(
+                Delivery.planned_date >= today,
+                Delivery.planned_date <= in_three_days,
+                Delivery.actual_date.is_(None)
+            ).all()
+            if upcoming_deliveries:
+                message = "Предстоящие поставки в ближайшие 3 дня:\n\n"
+                for delivery in upcoming_deliveries:
+                    supplier_name = delivery.supplier.name if delivery.supplier else "Неизвестно"
+                    planned_date = delivery.planned_date.strftime("%d.%m.%Y") if delivery.planned_date else "-"
+                    doc_number = delivery.doc_number or "-"
+                    message += f"• {supplier_name} — {planned_date} (Документ: {doc_number})\n"
+                QMessageBox.information(self, "Уведомление о поставках", message)
+                logging.info(f"Показано уведомление о {len(upcoming_deliveries)} предстоящих поставках")
+            else:
+                logging.info("Нет предстоящих поставок для уведомления")
+
+    def open_settings(self):
+        dialog = SettingsDialog(self)
+        dialog.exec_()
 
     def on_tab_changed(self, index):
         if self.tabs.tabText(index) == "Отчёты":
@@ -614,6 +798,7 @@ class MainWindow(QMainWindow):
                 if not d.actual_date:
                     item.setBackground(QBrush(QColor("#FFCCCC")))
                 self.delivery_list.addItem(item)
+        self.show_upcoming_deliveries_notification()
 
     def show_delivery(self):
         item = self.delivery_list.currentItem()
@@ -628,12 +813,14 @@ class MainWindow(QMainWindow):
         planned = QLabel()
         actual = QLabel()
         doc_num = QLabel()
+        doc_date = QLabel()
         planned_cost = QLabel()
         actual_cost = QLabel()
         info.addRow("Поставщик:", supplier)
         info.addRow("План. дата:", planned)
         info.addRow("Факт. дата:", actual)
         info.addRow("Номер док.:", doc_num)
+        info.addRow("Дата док.:", doc_date)
         info.addRow("План. стоимость:", planned_cost)
         info.addRow("Факт. стоимость:", actual_cost)
         layout.addLayout(info)
@@ -664,13 +851,14 @@ class MainWindow(QMainWindow):
             planned.setText(delivery.planned_date.strftime("%d.%m.%Y") if delivery.planned_date else "")
             actual.setText(delivery.actual_date.strftime("%d.%m.%Y") if delivery.actual_date else "")
             doc_num.setText(delivery.doc_number or "")
+            doc_date.setText(delivery.doc_date.strftime("%d.%m.%Y") if delivery.doc_date else "")
             products = s.query(ProductInDelivery).options(
                 joinedload(ProductInDelivery.product)
             ).filter_by(delivery_id=delivery_id).all()
             planned_total = sum((p.planned_quantity or 0) * (p.planned_price or 0) for p in products)
             actual_total = sum((p.actual_quantity or 0) * (p.actual_price or 0) for p in products)
-            planned_cost.setText(f"{planned_total:.2f}")
-            actual_cost.setText(f"{actual_total:.2f}")
+            planned_cost.setText(f"{planned_total}")
+            actual_cost.setText(f"{actual_total}")
             table.setRowCount(len(products))
             for row, p in enumerate(products):
                 item = QTableWidgetItem(p.product.name if p.product else "")
@@ -679,13 +867,13 @@ class MainWindow(QMainWindow):
                 item = QTableWidgetItem(str(p.planned_quantity or 0))
                 item.setTextAlignment(Qt.AlignCenter | Qt.AlignVCenter)
                 table.setItem(row, 1, item)
-                item = QTableWidgetItem(f"{p.planned_price or 0:.2f}")
+                item = QTableWidgetItem(f"{p.planned_price or 0}")
                 item.setTextAlignment(Qt.AlignCenter | Qt.AlignVCenter)
                 table.setItem(row, 2, item)
                 item = QTableWidgetItem(str(p.actual_quantity or 0))
                 item.setTextAlignment(Qt.AlignCenter | Qt.AlignVCenter)
                 table.setItem(row, 3, item)
-                item = QTableWidgetItem(f"{p.actual_price or 0:.2f}")
+                item = QTableWidgetItem(f"{p.actual_price or 0}")
                 item.setTextAlignment(Qt.AlignCenter | Qt.AlignVCenter)
                 table.setItem(row, 4, item)
                 table.setRowHeight(row, 50)
@@ -836,7 +1024,8 @@ class MainWindow(QMainWindow):
                         supplier_id=data['supplier_id'],
                         planned_date=data['planned_date'],
                         actual_date=data['actual_date'],
-                        doc_number=data['doc_number']
+                        doc_number=data['doc_number'],
+                        doc_date=data['doc_date']
                     )
                     s.add(delivery)
                     s.flush()
@@ -879,6 +1068,7 @@ class MainWindow(QMainWindow):
                     delivery.planned_date = data['planned_date']
                     delivery.actual_date = data['actual_date']
                     delivery.doc_number = data['doc_number']
+                    delivery.doc_date = data['doc_date']
                     s.query(ProductInDelivery).filter_by(delivery_id=delivery.id).delete()
                     for p in data['products']:
                         s.add(ProductInDelivery(
@@ -953,9 +1143,9 @@ class MainWindow(QMainWindow):
                         {
                             "name": p.product.name if p.product else "",
                             "planned_quantity": p.planned_quantity or 0,
-                            "planned_price": p.planned_price or 0.0,
+                            "planned_price": p.planned_price or 0,
                             "actual_quantity": p.actual_quantity or 0,
-                            "actual_price": p.actual_price or 0.0
+                            "actual_price": p.actual_price or 0
                         }
                         for p in products if p.delivery_id == d.id
                     ]
@@ -999,13 +1189,12 @@ class MainWindow(QMainWindow):
             for row in table[1:]:
                 items = []
                 for cell in row:
-                    # Приведение всех значений к строке
                     if isinstance(cell, (int, float)):
-                        cell_str = f"{cell:.2f}" if isinstance(cell, float) else str(cell)
+                        cell_str = str(cell)
                     elif cell is None:
                         cell_str = ""
                     else:
-                        cell_str = str(cell)  # Преобразуем любой объект в строку
+                        cell_str = str(cell)
                     logging.debug(f"Создание QStandardItem для значения: {cell_str} (тип: {type(cell)})")
                     items.append(QStandardItem(cell_str))
                 model.appendRow(items)
@@ -1030,7 +1219,7 @@ class MainWindow(QMainWindow):
             table.append([
                 d.supplier.name if d.supplier else "",
                 d.planned_date.strftime("%d.%m.%Y") if d.planned_date else "",
-                str(total)  # Используем целое число, так как planned_price - Integer
+                str(total)
             ])
         total_sum = sum((p.planned_quantity or 0) * (p.planned_price or 0) for p in products)
         table.append(["", "ИТОГО", str(total_sum)])
@@ -1056,7 +1245,7 @@ class MainWindow(QMainWindow):
                 d.supplier.name if d.supplier else "",
                 d.doc_number or "",
                 d.actual_date.strftime("%d.%m.%Y") if d.actual_date else "",
-                str(total)  # Используем целое число
+                str(total)
             ])
         total_sum = sum((p.actual_quantity or 0) * (p.actual_price or 0) for p in products if any(d.id == p.delivery_id for d in completed))
         table.append(["", "Итого", "", str(total_sum)])
@@ -1078,8 +1267,8 @@ class MainWindow(QMainWindow):
                         d.planned_date.strftime("%d.%m.%Y") if d.planned_date else "",
                         d.actual_date.strftime("%d.%m.%Y") if d.actual_date else "",
                         p.product.name if p.product else "",
-                        f"{p.planned_quantity or 0}/{p.planned_price or 0}",  # Без .2f
-                        f"{p.actual_quantity or 0}/{p.actual_price or 0}"     # Без .2f
+                        f"{p.planned_quantity or 0}/{p.planned_price or 0}",
+                        f"{p.actual_quantity or 0}/{p.actual_price or 0}"
                     ])
         return {"header": header, "table": table, "col_widths": [50, 60, 35, 35, 50, 40, 40]}
 
@@ -1110,7 +1299,7 @@ class MainWindow(QMainWindow):
             table_data = [[Paragraph(str(cell) if cell is not None else '', styles['Table']) for cell in row] for row in self.current_report['table']]
             col_widths = self.current_report.get('col_widths', [40] * len(table_data[0]))
             if len(col_widths) != len(table_data[0]):
-                col_widths = [40] * len(table_data[0])  # Корректировка размеров
+                col_widths = [40] * len(table_data[0])
             col_widths = [w * mm for w in col_widths]
             table = Table(table_data, colWidths=col_widths, rowHeights=[6*mm] * len(table_data))
             table.setStyle(TableStyle([

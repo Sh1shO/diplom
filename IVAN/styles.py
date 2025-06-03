@@ -3,18 +3,19 @@ STYLESHEET = """
 QMainWindow, QDialog {
     background-color: #FAFAFA;
     color: #111827;
-    font-family: 'Segoe UI', sans-serif;
     font-size: 14px;
+    line-height: 1.4;
 }
 
 /* === Поля ввода === */
 QLineEdit {
     background-color: #FFFFFF;
     color: #111827;
-    padding: 4px 6px;
+    padding: 6px 6px;
     border: 1px solid #D1D5DB;
     border-radius: 2px;
     font-size: 14px;
+    line-height: 1.4;
 }
 QLineEdit:focus {
     border: 1px solid #2563EB;
@@ -28,11 +29,12 @@ QLineEdit[placeholderText] {
 QPushButton {
     background-color: #FFFFFF;
     color: #111827;
-    padding: 6px 10px;
+    padding: 8px 10px;
     border: 1px solid #D1D5DB;
     border-radius: 2px;
     font-weight: 500;
     font-size: 14px;
+    line-height: 1.4;
 }
 QPushButton:hover {
     background-color: #F3F4F6;
@@ -41,39 +43,34 @@ QPushButton:pressed {
     background-color: #E5E7EB;
 }
 QPushButton#add_button {
-    background-color: #EFF6FF;
+    background-color: #E0F2FE;
     color: #1D4ED8;
-    font-weight: 600;
 }
 QPushButton#add_button:hover {
-    background-color: #DBEAFE;
+    background-color: #BFDBFE;
 }
 QPushButton#edit_button {
-    background-color: #ECFDF5;
-    color: #047857;
-    font-weight: 600;
+    background-color: #DCFCE7;
+    color: #059669;
 }
 QPushButton#edit_button:hover {
-    background-color: #D1FAE5;
+    background-color: #BBF7D0;
 }
 QPushButton#delete_button {
-    background-color: #FEF2F2;
+    background-color: #FEE2E2;
     color: #B91C1C;
-    font-weight: 600;
 }
 QPushButton#delete_button:hover {
     background-color: #FCA5A5;
 }
 QPushButton#login_button {
-    background-color: #FACC15;
-    color: #1F2937;
+    background-color: #FEF3C7;
+    color: #92400E;
     font-weight: bold;
     min-width: 180px;
     border: none;
     border-radius: 2px;
-}
-QPushButton#login_button:hover {
-    background-color: #FBBF24;
+    padding: 10px 12px;
 }
 
 /* === Таблицы === */
@@ -93,8 +90,9 @@ QHeaderView::section {
     border-bottom: 1px solid #D1D5DB;
 }
 QTableWidget::item, QTableView::item {
-    padding: 4px;
-    min-height: 30px;
+    padding: 6px 4px;
+    min-height: 32px;
+    line-height: 1.4;
 }
 QTableWidget::item:selected, QTableView::item:selected {
     background-color: #DBEAFE;
@@ -110,7 +108,7 @@ QComboBox {
     background-color: #FFFFFF;
     border: 1px solid #D1D5DB;
     border-radius: 2px;
-    padding: 4px;
+    padding: 6px;
     font-size: 14px;
     min-width: 150px;
 }
@@ -128,18 +126,22 @@ QComboBox QAbstractItemView {
 QDateEdit {
     background-color: #FFFFFF;
     color: #111827;
-    padding: 4px;
+    padding: 6px;
     border: 1px solid #D1D5DB;
     border-radius: 2px;
     font-size: 14px;
+    line-height: 1.4;
 }
 
 /* === Метки === */
 QLabel {
     color: #111827;
     background: transparent;
-    padding: 2px;
+    padding: 4px 8px; /* Увеличили горизонтальный padding */
     font-size: 14px;
+    line-height: 1.4;
+    min-width: 100px; /* Минимальная ширина */
+    text-align: left; /* Явное выравнивание */
 }
 QLabel#login_title_label {
     font-size: 18px;
@@ -159,7 +161,7 @@ QTabWidget::pane {
 QTabBar::tab {
     background-color: #E5E7EB;
     color: #1F2937;
-    padding: 6px 12px;
+    padding: 8px 12px;
     font-weight: 500;
     font-size: 14px;
     border: 1px solid #D1D5DB;
@@ -183,7 +185,7 @@ QListWidget {
     background-color: #FFFFFF;
     border: 1px solid #D1D5DB;
     border-radius: 2px;
-    padding: 4px;
+    padding: 6px;
     font-size: 14px;
 }
 QListWidget::item:selected {
@@ -196,7 +198,7 @@ QGroupBox {
     background-color: #FFFFFF;
     border: 1px solid #D1D5DB;
     border-radius: 2px;
-    padding: 6px;
+    padding: 12px; /* Увеличили padding */
     font-size: 14px;
     font-weight: bold;
     color: #111827;
@@ -204,7 +206,7 @@ QGroupBox {
 QGroupBox::title {
     subcontrol-origin: margin;
     subcontrol-position: top left;
-    padding: 2px;
+    padding: 4px;
 }
 
 /* === Сообщения === */
@@ -217,7 +219,7 @@ QMessageBox QLabel {
     font-size: 14px;
 }
 QMessageBox QPushButton {
-    padding: 6px 10px;
+    padding: 8px 10px;
     border: 1px solid #D1D5DB;
     background-color: #F9FAFB;
     font-size: 14px;
