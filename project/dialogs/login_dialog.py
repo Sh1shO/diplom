@@ -15,7 +15,7 @@ class LoginDialog(QDialog):
         self.user_id = None  # Добавляем атрибут user_id, изначально None
         self.setup_ui()
         self.setStyleSheet(STYLESHEET)
-        self.setMinimumSize(400, 500)  # Увеличиваем размер окна
+        self.setMinimumSize(300, 300)  # Увеличиваем размер окна
         self.setWindowIcon(QIcon("./svg/logo.svg"))
 
     def setup_ui(self):

@@ -248,7 +248,7 @@ STYLESHEET = """
         font-family: 'Inter', 'Roboto', sans-serif; 
         border-radius: 6px; 
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05); 
-        min-width: 200px; /* Фиксированная минимальная ширина для отчетов */
+        min-width: 150px; /* Фиксированная минимальная ширина для отчетов */
         background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #FFFFFF, stop:0.95 #F7F9FC); /* Лёгкий градиент для визуального эффекта */
     }
     QComboBox:hover { 

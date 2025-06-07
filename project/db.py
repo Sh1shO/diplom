@@ -4,7 +4,7 @@ from sqlalchemy.orm import relationship, sessionmaker
 from sqlalchemy.sql import func
 
 # Настройка базы данных (предполагается PostgreSQL)
-engine = create_engine('postgresql://acbs:1234@95.174.93.180:5432/acbs_db')
+engine = create_engine('postgresql://postgres:1234@localhost:5432/diplom')
 Base = declarative_base()
 # Функция для получения сессии базы данных
 Session = sessionmaker(bind=engine)
@@ -150,3 +150,4 @@ class Attendance(Base):
 
 # Создание таблиц в базе данных
 Base.metadata.create_all(engine)
+

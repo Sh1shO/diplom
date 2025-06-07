@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QMainWindow, QHeaderView, QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QLineEdit, QPushButton, QTabWidget, QDateEdit, QLabel, QComboBox, QCalendarWidget, QListWidget, QGroupBox, QTableView, QFileDialog, QMessageBox, QListWidgetItem, QTableWidgetItem, QDialog, QFormLayout
+from PySide6.QtWidgets import QMainWindow, QHeaderView, QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QLineEdit, QPushButton, QTabWidget, QDateEdit, QLabel, QComboBox, QCalendarWidget, QListWidget, QGroupBox, QTableView, QFileDialog, QMessageBox, QListWidgetItem, QTableWidgetItem, QDialog
 from PySide6.QtCore import QDate, Qt, QTimer
 from PySide6.QtGui import QIcon, QPixmap, QTextCharFormat, QColor, QStandardItemModel, QStandardItem
 from styles.styles import STYLESHEET
@@ -53,16 +53,9 @@ class MainWindow(QMainWindow):
         self.tabs = QTabWidget()
         main_layout.addWidget(self.tabs)
 
-        # Вкладка "Список"
         self.setup_table_tab()
-
-        # Вкладка "Календарь"
         self.setup_calendar_tab()
-
-        # Вкладка "Админ-панель"
         self.setup_admin_tab()
-
-        # Вкладка "Отчёты"
         self.setup_report_tab()
 
         main_layout.addWidget(self.tabs)
@@ -71,16 +64,12 @@ class MainWindow(QMainWindow):
         table_tab = QWidget()
         table_layout = QVBoxLayout(table_tab)
 
-        # Верхний горизонтальный макет для поиска и кнопок
         top_layout = QHBoxLayout()
-            
-        # Поле поиска слева
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Поиск по названию")
         top_layout.addWidget(self.search_input)
-        top_layout.addStretch()  # Растяжение между поиском и кнопками
+        top_layout.addStretch()
 
-        # Кнопки "Добавить" и "Удалить" справа
         self.add_button = QPushButton("Добавить")
         self.add_button.setObjectName("admin_button")
         self.add_button.clicked.connect(self.add_event)
@@ -96,7 +85,6 @@ class MainWindow(QMainWindow):
 
         table_layout.addLayout(top_layout)
 
-        # Группа фильтров
         filters_group = QGroupBox("Фильтры")
         filters_layout = QHBoxLayout(filters_group)
 
@@ -143,6 +131,14 @@ class MainWindow(QMainWindow):
         filters_layout.addWidget(QLabel("Формат:"))
         filters_layout.addWidget(self.format_filter_table)
 
+        self.event_type_filter_table = QComboBox()
+        with get_session() as session:
+            event_types = session.query(EventType).all()
+            self.event_type_filter_table.addItem("Все формы")
+            self.event_type_filter_table.addItems([et.name for et in event_types])
+        filters_layout.addWidget(QLabel("Форма мероприятия:"))
+        filters_layout.addWidget(self.event_type_filter_table)
+
         table_layout.addWidget(filters_group)
 
         self.events_table = QTableWidget()
@@ -163,6 +159,7 @@ class MainWindow(QMainWindow):
         self.direction_filter_table.currentIndexChanged.connect(self.update_events_table)
         self.audience_filter_table.currentIndexChanged.connect(self.update_events_table)
         self.format_filter_table.currentIndexChanged.connect(self.update_events_table)
+        self.event_type_filter_table.currentIndexChanged.connect(self.update_events_table)
 
         self.tabs.addTab(table_tab, "Список")
 
@@ -183,9 +180,7 @@ class MainWindow(QMainWindow):
 
     def setup_admin_tab(self):
         with get_session() as session:
-            user = session.query(User).options(
-                joinedload(User.role)
-            ).filter(User.id == self.user_id).first()
+            user = session.query(User).options(joinedload(User.role)).filter(User.id == self.user_id).first()
             if user and user.role and user.role.name == "admin":
                 admin_tab = QWidget()
                 admin_layout = QVBoxLayout(admin_tab)
@@ -194,7 +189,6 @@ class MainWindow(QMainWindow):
                 admin_title.setAlignment(Qt.AlignCenter)
                 admin_layout.addWidget(admin_title)
 
-                # Секция управления справочниками
                 manage_group = QGroupBox("Управление справочниками")
                 manage_layout = QVBoxLayout(manage_group)
 
@@ -206,7 +200,6 @@ class MainWindow(QMainWindow):
                 ])
                 self.table_selector.currentIndexChanged.connect(self.refresh_table)
 
-                # Кнопки Добавить и Удалить рядом с выпадающим списком
                 selector_layout = QHBoxLayout()
                 selector_layout.addWidget(QLabel("Выберите справочник:"))
                 selector_layout.addWidget(self.table_selector)
@@ -278,9 +271,10 @@ class MainWindow(QMainWindow):
 
         self.report_type = QComboBox()
         self.report_type.addItems([
-            "Еженедельный (по неделям)",
-            "Ежеквартальный (по месяцам)",
-            "Цифровые показатели (по направлениям)"
+            "Еженедельный отчёт по посещениям и массовой работе",
+            "Ежемесячный отчёт по посещениям и массовой работе",
+            "Ежеквартальный (ежемесячный)",
+            "Цифровые показатели по массовой работе"
         ])
         report_type_layout = QHBoxLayout()
         report_type_layout.addWidget(QLabel("Тип отчёта:"))
@@ -316,6 +310,16 @@ class MainWindow(QMainWindow):
         format_layout.addWidget(QLabel("Формат:"))
         format_layout.addWidget(self.format_filter)
         filters_group_layout.addLayout(format_layout)
+
+        self.event_type_filter = QComboBox()
+        with get_session() as session:
+            event_types = session.query(EventType).all()
+            self.event_type_filter.addItem("Все формы")
+            self.event_type_filter.addItems([et.name for et in event_types])
+        event_type_layout = QHBoxLayout()
+        event_type_layout.addWidget(QLabel("Форма мероприятия:"))
+        event_type_layout.addWidget(self.event_type_filter)
+        filters_group_layout.addLayout(event_type_layout)
 
         self.generate_report_button = QPushButton("Сформировать отчёт")
         self.generate_report_button.clicked.connect(self.generate_report)
@@ -359,6 +363,7 @@ class MainWindow(QMainWindow):
                 direction_name = self.direction_filter_table.currentText()
                 audience_name = self.audience_filter_table.currentText()
                 format_name = self.format_filter_table.currentText()
+                event_type_name = self.event_type_filter_table.currentText()
 
                 query = session.query(Event).filter(
                     Event.date >= start_date,
@@ -375,14 +380,16 @@ class MainWindow(QMainWindow):
                     query = query.join(TargetAudience, Event.target_audience_id == TargetAudience.id).filter(TargetAudience.name == audience_name)
                 if format_name != "Все форматы":
                     query = query.join(EventFormat, Event.format_id == EventFormat.id).filter(EventFormat.name == format_name)
+                if event_type_name != "Все формы":
+                    query = query.join(EventType, Event.event_type_id == EventType.id).filter(EventType.name == event_type_name)
 
                 events = query.all()
 
                 self.events_table.setRowCount(len(events))
-                self.events_table.setColumnCount(9)
+                self.events_table.setColumnCount(10)
                 self.events_table.setHorizontalHeaderLabels([
                     "Название", "Дата", "Учреждение", "Формат",
-                    "Классификация", "Направление", "Тип", "Аудитория", "Место"
+                    "Классификация", "Направление", "Тип", "Форма мероприятия", "Аудитория", "Место"
                 ])
                 self.events_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
 
@@ -395,8 +402,9 @@ class MainWindow(QMainWindow):
                     self.events_table.setItem(row, 4, QTableWidgetItem(event.classification.name if event.classification else ""))
                     self.events_table.setItem(row, 5, QTableWidgetItem(event.direction.name if event.direction else ""))
                     self.events_table.setItem(row, 6, QTableWidgetItem(event.event_type.name if event.event_type else ""))
-                    self.events_table.setItem(row, 7, QTableWidgetItem(event.target_audience.name if event.target_audience else ""))
-                    self.events_table.setItem(row, 8, QTableWidgetItem(event.venue.name if event.venue else ""))
+                    self.events_table.setItem(row, 7, QTableWidgetItem(event.event_type.name if event.event_type else ""))
+                    self.events_table.setItem(row, 8, QTableWidgetItem(event.target_audience.name if event.target_audience else ""))
+                    self.events_table.setItem(row, 9, QTableWidgetItem(event.venue.name if event.venue else ""))
                     attendance = event.attendances[0] if event.attendances else None
                     if attendance and attendance.total_attendees is not None:
                         total_attendees += attendance.total_attendees
@@ -455,6 +463,9 @@ class MainWindow(QMainWindow):
                     if child_attendees > total_attendees:
                         QMessageBox.critical(self, "Ошибка", "Количество детей не может превышать общее количество посетителей")
                         return
+                    if not data["event_type_id"]:
+                        QMessageBox.critical(self, "Ошибка", "Выберите форму мероприятия")
+                        return
 
                     organizer = session.query(Institution).filter(Institution.id == data["organizer_id"]).first()
                     if not organizer:
@@ -470,7 +481,7 @@ class MainWindow(QMainWindow):
                         classification_id=data["classification_id"],
                         direction_id=data["direction_id"],
                         event_type_id=data["event_type_id"],
-                        target_audience_id=data["target_audience_id"],
+                        target_audience_id=data["audience_id"],
                         venue_id=data["venue_id"]
                     )
                     session.add(new_event)
@@ -540,6 +551,9 @@ class MainWindow(QMainWindow):
                     if child_attendees > total_attendees:
                         QMessageBox.critical(self, "Ошибка", "Количество детей не может превышать общее количество посетителей")
                         return
+                    if not data["event_type_id"]:
+                        QMessageBox.critical(self, "Ошибка", "Выберите форму мероприятия")
+                        return
 
                     event_data.name = data["name"]
                     event_data.date = data["date"]
@@ -549,7 +563,7 @@ class MainWindow(QMainWindow):
                     event_data.classification_id = data["classification_id"]
                     event_data.direction_id = data["direction_id"]
                     event_data.event_type_id = data["event_type_id"]
-                    event_data.target_audience_id = data["target_audience_id"]
+                    event_data.target_audience_id = data["audience_id"]
                     event_data.venue_id = data["venue_id"]
 
                     attendance = event_data.attendances[0] if event_data.attendances else None
@@ -622,6 +636,9 @@ class MainWindow(QMainWindow):
                     if child_attendees > total_attendees:
                         QMessageBox.critical(self, "Ошибка", "Количество детей не может превышать общее количество посетителей")
                         return
+                    if not data["event_type_id"]:
+                        QMessageBox.critical(self, "Ошибка", "Выберите форму мероприятия")
+                        return
 
                     event_data.name = data["name"]
                     event_data.date = data["date"]
@@ -631,7 +648,7 @@ class MainWindow(QMainWindow):
                     event_data.classification_id = data["classification_id"]
                     event_data.direction_id = data["direction_id"]
                     event_data.event_type_id = data["event_type_id"]
-                    event_data.target_audience_id = data["target_audience_id"]
+                    event_data.target_audience_id = data["audience_id"]
                     event_data.venue_id = data["venue_id"]
 
                     attendance = event_data.attendances[0] if event_data.attendances else None
@@ -727,8 +744,8 @@ class MainWindow(QMainWindow):
                 direction_name = self.direction_filter.currentText()
                 audience_name = self.audience_filter.currentText()
                 format_name = self.format_filter.currentText()
+                event_type_name = self.event_type_filter.currentText()
 
-                # Eagerly load all relationships to avoid lazy loading issues
                 query = session.query(Event).\
                     join(Institution, Event.organizer_id == Institution.id).\
                     join(EventFormat, Event.format_id == EventFormat.id).\
@@ -758,10 +775,11 @@ class MainWindow(QMainWindow):
                     query = query.filter(TargetAudience.name == audience_name)
                 if format_name != "Все форматы":
                     query = query.filter(EventFormat.name == format_name)
+                if event_type_name != "Все формы":
+                    query = query.filter(EventType.name == event_type_name)
 
                 events = query.all()
 
-                # Extract event data into a list of dictionaries to avoid session issues
                 events_data = [
                     {
                         "name": event.name,
@@ -776,6 +794,7 @@ class MainWindow(QMainWindow):
                     join(Institution, Event.organizer_id == Institution.id).\
                     join(EventFormat, Event.format_id == EventFormat.id).\
                     join(ActivityDirection, Event.direction_id == ActivityDirection.id).\
+                    join(EventType, Event.event_type_id == EventType.id).\
                     join(TargetAudience, Event.target_audience_id == TargetAudience.id).\
                     filter(Event.date >= start_date, Event.date <= end_date)
 
@@ -787,6 +806,8 @@ class MainWindow(QMainWindow):
                     attendance_query = attendance_query.filter(TargetAudience.name == audience_name)
                 if format_name != "Все форматы":
                     attendance_query = attendance_query.filter(EventFormat.name == format_name)
+                if event_type_name != "Все формы":
+                    attendance_query = attendance_query.filter(EventType.name == event_type_name)
 
                 attendances = attendance_query.all()
 
@@ -794,17 +815,18 @@ class MainWindow(QMainWindow):
                     QMessageBox.warning(self, "Предупреждение", "Нет данных для формирования отчёта за выбранный период.")
                     return
 
-                if report_type == "Еженедельный (по неделям)":
-                    report_data = self.generate_weekly_by_weeks_report(events, attendances, start_date, end_date, institution_name, direction_name, audience_name, format_name)
-                elif report_type == "Ежеквартальный (по месяцам)":
-                    report_data = self.generate_monthly_by_months_report(events, attendances, start_date, end_date, institution_name, direction_name, audience_name, format_name)
-                elif report_type == "Цифровые показатели (по направлениям)":
-                    report_data = self.generate_digital_indicators_by_directions_report(events, attendances, start_date, end_date, institution_name, direction_name, audience_name, format_name)
+                if report_type == "Еженедельный отчёт по посещениям и массовой работе":
+                    report_data = self.generate_weekly_by_cultural_events_report(events, attendances, start_date, end_date, institution_name, direction_name, audience_name, format_name, event_type_name)
+                elif report_type == "Ежемесячный отчёт по посещениям и массовой работе":
+                    report_data = self.generate_monthly_by_weeks_report(events, attendances, start_date, end_date, institution_name, direction_name, audience_name, format_name, event_type_name)
+                elif report_type == "Ежеквартальный (ежемесячный)":
+                    report_data = self.generate_quarterly_by_months_report(events, attendances, start_date, end_date, institution_name, direction_name, audience_name, format_name, event_type_name)
+                elif report_type == "Цифровые показатели по массовой работе":
+                    report_data = self.generate_digital_indicators_by_directions_report(events, attendances, start_date, end_date, institution_name, direction_name, audience_name, format_name, event_type_name)
                 else:
                     QMessageBox.critical(self, "Ошибка", "Неизвестный тип отчёта.")
                     return
 
-                # Store event data (not Event objects) for use in generate_pdf
                 report_data['events_data'] = events_data
                 self.current_report_data = report_data
                 self.display_report(report_data)
@@ -838,20 +860,28 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Ошибка", f"Не удалось загрузить шрифт DejaVuSans.ttf: {str(e)}\nСкачайте шрифт DejaVuSans.ttf и поместите его в директорию проекта.")
             return
 
-        doc = SimpleDocTemplate(file_name, pagesize=landscape(A4), rightMargin=10*mm, leftMargin=10*mm, topMargin=10*mm, bottomMargin=10*mm)
+        # Настройка документа
+        doc = SimpleDocTemplate(
+            file_name,
+            pagesize=landscape(A4),
+            rightMargin=10*mm,
+            leftMargin=10*mm,
+            topMargin=10*mm,
+            bottomMargin=10*mm
+        )
         elements = []
         styles = getSampleStyleSheet()
-        styles.add(ParagraphStyle(name='HeaderStyle', fontName='DejaVuSans', fontSize=14, leading=16, alignment=1))
-        styles.add(ParagraphStyle(name='TableStyle', fontName='DejaVuSans', fontSize=10, leading=12, alignment=0))
-        styles.add(ParagraphStyle(name='SectionHeader', fontName='DejaVuSans', fontSize=12, leading=14, alignment=0))
-        styles.add(ParagraphStyle(name='EventText', fontName='DejaVuSans', fontSize=10, leading=12, alignment=0, spaceAfter=6))
+        styles.add(ParagraphStyle(name='HeaderStyle', fontName='DejaVuSans', fontSize=12, leading=14, alignment=1))
+        styles.add(ParagraphStyle(name='TableStyle', fontName='DejaVuSans', fontSize=7, leading=8, alignment=0, wordWrap='CJK'))
+        styles.add(ParagraphStyle(name='SectionHeader', fontName='DejaVuSans', fontSize=10, leading=12, alignment=0))
+        styles.add(ParagraphStyle(name='EventText', fontName='DejaVuSans', fontSize=8, leading=10, alignment=0, spaceAfter=6))
 
-        # Add header
+        # Добавление заголовков отчёта
         for line in report_data['header']:
             elements.append(Paragraph(line, styles['HeaderStyle']))
-        elements.append(Spacer(1, 10*mm))
+        elements.append(Spacer(1, 8*mm))
 
-        # Add main table
+        # Подготовка таблицы
         table_data = report_data['table']
         if table_data:
             pdf_table_data = []
@@ -862,410 +892,654 @@ class MainWindow(QMainWindow):
                         cell = str(int(cell)) if cell == int(cell) else str(cell)
                     elif cell is None or cell == '':
                         cell = '-'
-                    pdf_row.append(Paragraph(cell, styles['TableStyle']))
+                    pdf_row.append(Paragraph(str(cell), styles['TableStyle']))
                 pdf_table_data.append(pdf_row)
+
+            # Динамическая настройка ширины столбцов
+            page_width = landscape(A4)[0] - 20*mm  # Учитываем поля (10 мм слева + 10 мм справа)
+            col_count = len(table_data[0])
             col_widths = report_data.get('col_widths', None)
             if col_widths:
-                col_widths = [w * mm for w in col_widths]
-            table = Table(pdf_table_data, colWidths=col_widths)
+                col_widths = [min(w, page_width / col_count) * mm for w in col_widths]
+                # Масштабируем ширину столбцов, если сумма превышает ширину страницы
+                total_width = sum(col_widths)
+                if total_width > page_width:
+                    scale_factor = page_width / total_width
+                    col_widths = [w * scale_factor for w in col_widths]
+            else:
+                col_widths = [page_width / col_count] * col_count  # Равномерное распределение ширины
+
+            # Создание таблицы с поддержкой разбиения
+            table = Table(pdf_table_data, colWidths=col_widths, splitByRow=True, splitInRow=False)
             table.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (-1, 0), colors.Color(0.95, 0.95, 0.95)),
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.Color(0.13, 0.13, 0.13)),
                 ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
                 ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
                 ('FONTNAME', (0, 0), (-1, -1), 'DejaVuSans'),
-                ('FONTSIZE', (0, 0), (-1, 0), 10),
-                ('FONTSIZE', (0, 1), (-1, -1), 10),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
-                ('TOPPADDING', (0, 0), (-1, -1), 5),
-                ('LEFTPADDING', (0, 0), (-1, -1), 5),
-                ('RIGHTPADDING', (0, 0), (-1, -1), 5),
+                ('FONTSIZE', (0, 0), (-1, 0), 7),
+                ('FONTSIZE', (0, 1), (-1, -1), 7),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+                ('TOPPADDING', (0, 0), (-1, -1), 4),
+                ('LEFTPADDING', (0, 0), (-1, -1), 4),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 4),
                 ('BACKGROUND', (0, 1), (-1, -1), colors.white),
                 ('BACKGROUND', (0, -1), (-1, -1), colors.Color(0.9, 0.9, 0.9)),
                 ('GRID', (0, 0), (-1, -1), 1, colors.Color(0.88, 0.88, 0.88)),
                 ('BOX', (0, 0), (-1, -1), 1, colors.Color(0.88, 0.88, 0.88)),
+                ('WORDWRAP', (0, 0), (-1, -1), 'CJK'),
             ]))
             elements.append(table)
 
-        # Add spacer before events list
-        elements.append(Spacer(1, 20*mm))
+        elements.append(Spacer(1, 15*mm))
 
-        # Add events list section
+        # Добавление списка мероприятий
         elements.append(Paragraph("Список мероприятий", styles['SectionHeader']))
         elements.append(Spacer(1, 5*mm))
 
-        # Use events_data as paragraphs instead of a table
         events_data = report_data.get('events_data', [])
         if events_data:
             for event_data in events_data:
-                event_text = f"Название: {event_data['name'] or '-'}."
-                event_text += f"\nДата: {event_data['date'].strftime('%d.%m.%Y') if event_data['date'] else '-'}."
-                event_text += f"\nОписание: {event_data['description'] or '-'}."
+                event_text = f"Название: {event_data['name'] or '-'}. "
+                event_text += f"Дата: {event_data['date'].strftime('%d.%m.%Y') if event_data['date'] else '-'}. "
+                event_text += f"Описание: {event_data['description'] or '-'}."
                 elements.append(Paragraph(event_text, styles['EventText']))
         else:
             elements.append(Paragraph("Мероприятий за выбранный период не найдено.", styles['TableStyle']))
 
+        # Построение документа
         doc.build(elements)
 
     def display_report(self, report_data):
         model = QStandardItemModel()
         table_data = report_data['table']
         headers = table_data[0]
-        model.setHorizontalHeaderLabels(headers)
+        
+        # Сохраняем оригинальные заголовки без переносов
+        wrapped_headers = [str(header) for header in headers]
+        
+        model.setHorizontalHeaderLabels(wrapped_headers)
+        
         for row in table_data[1:]:
             items = [QStandardItem(str(cell) if isinstance(cell, (int, float)) else cell or '-') for cell in row]
             model.appendRow(items)
+        
         self.report_preview.setModel(model)
-        self.report_preview.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        
+        header = self.report_preview.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.Interactive)  # Позволяет пользователю изменять ширину столбцов
+        header.setDefaultAlignment(Qt.AlignCenter | Qt.AlignVCenter)
+        
+        # Настраиваем минимальную ширину столбцов
+        for i in range(len(wrapped_headers)):
+            header.setMinimumSectionSize(100)
+            header.resizeSection(i, 150)  # Начальная ширина столбцов увеличена
+        
+        header.setDefaultSectionSize(100)
+        
+        self.report_preview.setWordWrap(True)
         self.report_preview.resizeRowsToContents()
+        self.report_preview.verticalHeader().setDefaultSectionSize(50)  # Увеличена высота строк
+        
+        # Автоматическая подстройка ширины столбцов под содержимое
+        self.report_preview.resizeColumnsToContents()
 
-    def generate_weekly_by_weeks_report(self, events, attendances, start_date, end_date, institution_name, direction_name, audience_name, format_name):
+    def generate_weekly_by_cultural_events_report(self, events, attendances, start_date, end_date, institution_name, direction_name, audience_name, format_name, event_type_name):
+            header = [
+                "Еженедельный отчёт по посещениям и массовой работе",
+                f"Период: {start_date.strftime('%d.%m.%Y')} - {end_date.strftime('%d.%m.%Y')}",
+                f"Учреждение: {institution_name}",
+                f"Направление: {direction_name}",
+                f"Аудитория: {audience_name}",
+                f"Формат: {format_name}",
+                f"Форма мероприятия: {event_type_name}"
+            ]
+
+            table = [
+                [
+                    "Библиотека-филиал",
+                    "Культурно-досуговые мероприятия",
+                    "", "", "", "", "", "", "", "",
+                    "Волонтёры культуры, чел.",
+                    "Посещения",
+                    "", "",
+                    "Занятия клубов, чел."
+                ],
+                [
+                    "",
+                    "Всего", "Для детей", "Выездные", "Открытые площадки",
+                    "Дворовые", "Экскурсии", "Мастер-классы", "Профилактические", "Онлайн",
+                    "",
+                    "Всего", "На мероприятиях", "Дети лагерей",
+                    ""
+                ]
+            ]
+
+            with get_session() as session:
+                institutions = session.query(Institution).all()
+                event_types = session.query(EventType).all()
+                event_type_map = {et.name: et.id for et in event_types}
+
+                institution_data = {inst.name: {
+                    "total_events": 0,
+                    "child_events": 0,
+                    "offsite_events": 0,
+                    "open_space_events": 0,
+                    "yard_events": 0,
+                    "excursion_events": 0,
+                    "masterclass_events": 0,
+                    "preventive_events": 0,
+                    "online_events": 0,
+                    "volunteers": 0,
+                    "total_visits": 0,
+                    "event_attendees": 0,
+                    "child_camp_attendees": 0,
+                    "club_info": "0/0/0"
+                } for inst in institutions}
+
+                for event in events:
+                    inst_name = event.organizer.name if event.organizer else "Не указано"
+                    if inst_name in institution_data:
+                        institution_data[inst_name]["total_events"] += 1
+                        if event.target_audience and event.target_audience.name == "Дети":
+                            institution_data[inst_name]["child_events"] += 1
+                        if event.event_type:
+                            event_type_name = event.event_type.name
+                            if event_type_name == "Выездное":
+                                institution_data[inst_name]["offsite_events"] += 1
+                            elif event_type_name == "На открытых площадках":
+                                institution_data[inst_name]["open_space_events"] += 1
+                            elif event_type_name == "Дворовое":
+                                institution_data[inst_name]["yard_events"] += 1
+                            elif event_type_name == "Экскурсия":
+                                institution_data[inst_name]["excursion_events"] += 1
+                            elif event_type_name == "Мастер-класс":
+                                institution_data[inst_name]["masterclass_events"] += 1
+                            elif event_type_name == "Профилактическое":
+                                institution_data[inst_name]["preventive_events"] += 1
+                            elif event_type_name == "Онлайн":
+                                institution_data[inst_name]["online_events"] += 1
+
+                for attendance in attendances:
+                    inst_name = attendance.event.organizer.name if attendance.event.organizer else "Не указано"
+                    if inst_name in institution_data:
+                        institution_data[inst_name]["volunteers"] += attendance.volunteers or 0
+                        institution_data[inst_name]["event_attendees"] += attendance.total_attendees or 0
+                        institution_data[inst_name]["child_camp_attendees"] += attendance.child_attendees or 0
+                        institution_data[inst_name]["total_visits"] += attendance.total_attendees or 0
+
+                total_events = 0
+                total_child_events = 0
+                total_offsite_events = 0
+                total_open_space_events = 0
+                total_yard_events = 0
+                total_excursion_events = 0
+                total_masterclass_events = 0
+                total_preventive_events = 0
+                total_online_events = 0
+                total_volunteers = 0
+                total_visits = 0
+                total_event_attendees = 0
+                total_child_camp_attendees = 0
+
+                for inst_name, data in institution_data.items():
+                    table.append([
+                        inst_name,
+                        data["total_events"], data["child_events"], data["offsite_events"], data["open_space_events"],
+                        data["yard_events"], data["excursion_events"], data["masterclass_events"], data["preventive_events"], data["online_events"],
+                        data["volunteers"],
+                        data["total_visits"], data["event_attendees"], data["child_camp_attendees"],
+                        data["club_info"]
+                    ])
+                    total_events += data["total_events"]
+                    total_child_events += data["child_events"]
+                    total_offsite_events += data["offsite_events"]
+                    total_open_space_events += data["open_space_events"]
+                    total_yard_events += data["yard_events"]
+                    total_excursion_events += data["excursion_events"]
+                    total_masterclass_events += data["masterclass_events"]
+                    total_preventive_events += data["preventive_events"]
+                    total_online_events += data["online_events"]
+                    total_volunteers += data["volunteers"]
+                    total_visits += data["total_visits"]
+                    total_event_attendees += data["event_attendees"]
+                    total_child_camp_attendees += data["child_camp_attendees"]
+
+                table.append([
+                    "ИТОГО по ЦБС",
+                    total_events, total_child_events, total_offsite_events, total_open_space_events,
+                    total_yard_events, total_excursion_events, total_masterclass_events, total_preventive_events, total_online_events,
+                    total_volunteers,
+                    total_visits, total_event_attendees, total_child_camp_attendees,
+                    "0/0/0"
+                ])
+
+            col_widths = [50, 25, 25, 25, 25, 25, 25, 25, 25, 25, 35, 25, 25, 25, 50]
+            return {'header': header, 'table': table, 'col_widths': col_widths}
+
+    def generate_monthly_by_weeks_report(self, events, attendances, start_date, end_date, institution_name, direction_name, audience_name, format_name, event_type_name):
         header = [
-            "Еженедельный отчёт (по неделям) по посещениям и массовой работе",
+            "Ежемесячный отчёт по посещениям и массовой работе",
             f"Период: {start_date.strftime('%d.%m.%Y')} - {end_date.strftime('%d.%m.%Y')}",
             f"Учреждение: {institution_name}",
             f"Направление: {direction_name}",
             f"Аудитория: {audience_name}",
-            f"Формат: {format_name}"
+            f"Формат: {format_name}",
+            f"Форма мероприятия: {event_type_name}"
         ]
 
         table = [
             [
-                "Период",
-                "Количество посещений всего по библиотеке",
-                "Проведено мероприятий",
-                "Обслужено всего чел.",
-                "В т.ч. детей",
-                "В т.ч. подростков группы риска",
-                "Кружки/участники/подростки группы риска"
+                "Неделя",
+                "Посещения",
+                "",
+                "Мероприятия",
+                "", "", "", "",
+                "Обслужено, чел.",
+                "Дети, чел.",
+                "Подростки, чел.",
+                "Занятия клубов, чел."
             ],
-
+            [
+                "",
+                "Всего",
+                "",
+                "Всего",
+                "Выездные",
+                "Открытые площадки",
+                "",
+                "Онлайн",
+                "",
+                "",
+                "",
+                ""
+            ]
         ]
 
-        weeks = []
-        current_date = start_date
-        while current_date <= end_date:
-            week_start = current_date - timedelta(days=current_date.weekday())
-            week_end = week_start + timedelta(days=6)
-            if week_end > end_date:
-                week_end = end_date
-            weeks.append((week_start, week_end))
-            current_date = week_end + timedelta(days=1)
+        with get_session() as session:
+            event_types = session.query(EventType).all()
+            event_type_map = {et.name: et.id for et in event_types}
 
-        weekly_data = {}
-        for week_start, week_end in weeks:
-            week_key = f"{week_start.strftime('%d-%m %B')} - {week_end.strftime('%d-%m %B')}"
-            weekly_data[week_key] = {
-                "total_visits": 0,
-                "total_events": 0,
-                "total_attendees": 0,
-                "child_attendees": 0,
-                "at_risk_teens": 0,
-                "club_activities": 0,
-                "club_participants": 0,
-                "risk_teens_clubs": 0
-            }
+            weeks = []
+            current_date = start_date
+            while current_date <= end_date:
+                week_start = current_date - timedelta(days=current_date.weekday())
+                week_end = min(week_start + timedelta(days=6), end_date)
+                if week_start >= start_date:
+                    weeks.append((week_start, week_end))
+                current_date = week_end + timedelta(days=1)
 
-        for event in events:
-            event_date = event.date
+            weekly_data = {}
             for week_start, week_end in weeks:
-                if week_start <= event_date <= week_end:
-                    week_key = f"{week_start.strftime('%d-%m %B')} - {week_end.strftime('%d-%m %B')}"
-                    weekly_data[week_key]["total_events"] += 1
-                    break
+                week_key = f"{week_start.strftime('%d-%m %B')} - {week_end.strftime('%d-%m %B')}"
+                weekly_data[week_key] = {
+                    "total_visits": 0,
+                    "total_events": 0,
+                    "offsite_events": 0,
+                    "open_space_events": 0,
+                    "online_events": 0,
+                    "total_attendees": 0,
+                    "child_attendees": 0,
+                    "at_risk_teens": 0,
+                    "club_info": "0/0/0"
+                }
 
-        for attendance in attendances:
-            event_date = attendance.event.date
-            for week_start, week_end in weeks:
-                if week_start <= event_date <= week_end:
-                    week_key = f"{week_start.strftime('%d-%m %B')} - {week_end.strftime('%d-%m %B')}"
-                    weekly_data[week_key]["total_attendees"] += attendance.total_attendees or 0
-                    weekly_data[week_key]["child_attendees"] += attendance.child_attendees or 0
-                    weekly_data[week_key]["at_risk_teens"] += attendance.at_risk_teens or 0
-                    break
+            for event in events:
+                event_date = event.date
+                for week_start, week_end in weeks:
+                    if week_start <= event_date <= week_end:
+                        week_key = f"{week_start.strftime('%d-%m %B')} - {week_end.strftime('%d-%m %B')}"
+                        weekly_data[week_key]["total_events"] += 1
+                        if event.event_type:
+                            if event.event_type.name == "Выездное":
+                                weekly_data[week_key]["offsite_events"] += 1
+                            elif event.event_type.name == "На открытых площадках":
+                                weekly_data[week_key]["open_space_events"] += 1
+                            elif event.event_type.name == "Онлайн":
+                                weekly_data[week_key]["online_events"] += 1
+                        break
 
-        total_visits = 0
-        total_events = 0
-        total_attendees = 0
-        total_child_attendees = 0
-        total_risk_teens = 0
-        total_club_activities = 0
-        total_club_participants = 0
-        total_risk_teens_clubs = 0
+            for attendance in attendances:
+                event_date = attendance.event.date
+                for week_start, week_end in weeks:
+                    if week_start <= event_date <= week_end:
+                        week_key = f"{week_start.strftime('%d-%m %B')} - {week_end.strftime('%d-%m %B')}"
+                        weekly_data[week_key]["total_attendees"] += attendance.total_attendees or 0
+                        weekly_data[week_key]["child_attendees"] += attendance.child_attendees or 0
+                        weekly_data[week_key]["at_risk_teens"] += attendance.at_risk_teens or 0
+                        weekly_data[week_key]["total_visits"] += attendance.total_attendees or 0
+                        break
 
-        for week_key, data in weekly_data.items():
-            club_info = f"{data['club_activities']}/{data['club_participants']}/{data['risk_teens_clubs']}" if data['club_activities'] > 0 else "-"
+            total_visits = 0
+            total_events = 0
+            total_offsite_events = 0
+            total_open_space_events = 0
+            total_online_events = 0
+            total_attendees = 0
+            total_child_attendees = 0
+            total_risk_teens = 0
+
+            for week_key, data in weekly_data.items():
+                table.append([
+                    week_key,
+                    data["total_visits"],
+                    "",
+                    data["total_events"],
+                    data["offsite_events"],
+                    data["open_space_events"],
+                    "",
+                    data["online_events"],
+                    data["total_attendees"],
+                    data["child_attendees"],
+                    data["at_risk_teens"],
+                    data["club_info"]
+                ])
+                total_visits += data["total_visits"]
+                total_events += data["total_events"]
+                total_offsite_events += data["offsite_events"]
+                total_open_space_events += data["open_space_events"]
+                total_online_events += data["online_events"]
+                total_attendees += data["total_attendees"]
+                total_child_attendees += data["child_attendees"]
+                total_risk_teens += data["at_risk_teens"]
+
             table.append([
-                week_key,
-                data['total_visits'],
-                data['total_events'],
-                data['total_attendees'],
-                data['child_attendees'],
-                data['at_risk_teens'],
-                club_info
+                "ИТОГО по ЦБС",
+                total_visits,
+                "",
+                total_events,
+                total_offsite_events,
+                total_open_space_events,
+                "",
+                total_online_events,
+                total_attendees,
+                total_child_attendees,
+                total_risk_teens,
+                "0/0/0"
             ])
-            total_visits += data['total_visits']
-            total_events += data['total_events']
-            total_attendees += data['total_attendees']
-            total_child_attendees += data['child_attendees']
-            total_risk_teens += data['at_risk_teens']
-            total_club_activities += data['club_activities']
-            total_club_participants += data['club_participants']
-            total_risk_teens_clubs += data['risk_teens_clubs']
 
-        table.append([
-            "ИТОГО по ЦБС",
-            total_visits,
-            total_events,
-            total_attendees,
-            total_child_attendees,
-            total_risk_teens,
-            f"{total_club_activities}/{total_club_participants}/{total_risk_teens_clubs}" if total_club_activities > 0 else "-"
-        ])
-
-        col_widths = [40, 30, 30, 30, 30, 30, 40]
+        col_widths = [50, 30, 20, 20, 20, 20, 20, 20, 20, 20, 20, 30]
         return {'header': header, 'table': table, 'col_widths': col_widths}
 
-    def generate_monthly_by_months_report(self, events, attendances, start_date, end_date, institution_name, direction_name, audience_name, format_name):
+    def generate_quarterly_by_months_report(self, events, attendances, start_date, end_date, institution_name, direction_name, audience_name, format_name, event_type_name):
         header = [
-            "Ежемесячный отчёт (по месяцам) по посещениям и массовой работе",
+            "Ежеквартальный отчёт",
             f"Период: {start_date.strftime('%d.%m.%Y')} - {end_date.strftime('%d.%m.%Y')}",
             f"Учреждение: {institution_name}",
             f"Направление: {direction_name}",
             f"Аудитория: {audience_name}",
-            f"Формат: {format_name}"
+            f"Формат: {format_name}",
+            f"Форма мероприятия: {event_type_name}"
         ]
 
         table = [
             [
                 "Месяц",
-                "Количество посещений всего по библиотеке",
-                "Проведено мероприятий",
-                "Обслужено всего чел.",
-                "В т.ч. детей",
-                "В т.ч. подростков группы риска",
-                "Кружки/участники/подростки группы риска"
+                "Посещения",
+                "",
+                "Мероприятия",
+                "", "", "", "",
+                "Обслужено, чел.",
+                "Дети, чел.",
+                "Подростки, чел.",
+                "Занятия клубов, чел."
             ],
-
+            [
+                "",
+                "Всего",
+                "",
+                "Всего",
+                "Выездные",
+                "Открытые площадки",
+                "",
+                "Онлайн",
+                "",
+                "",
+                "",
+                ""
+            ]
         ]
 
         MONTHS_RU = {
-            "january": "Январь",
-            "february": "Февраль",
-            "march": "Март",
-            "april": "Апрель",
-            "may": "Май",
-            "june": "Июнь",
-            "july": "Июль",
-            "august": "Август",
-            "september": "Сентябрь",
-            "october": "Октябрь",
-            "november": "Ноябрь",
-            "december": "Декабрь"
+            "january": "Январь", "february": "Февраль", "march": "Март",
+            "april": "Апрель", "may": "Май", "june": "Июнь",
+            "july": "Июль", "august": "Август", "september": "Сентябрь",
+            "october": "Октябрь", "november": "Ноябрь", "december": "Декабрь"
         }
 
-        months = {}
-        current_date = start_date
-        while current_date <= end_date:
-            month_key = current_date.strftime("%B").lower()
-            if month_key not in months:
-                months[month_key] = {
-                    "total_visits": 0,
-                    "total_events": 0,
-                    "total_attendees": 0,
-                    "child_attendees": 0,
-                    "at_risk_teens": 0,
-                    "club_activities": 0,
-                    "club_participants": 0,
-                    "risk_teens_clubs": 0
-                }
-            current_date += timedelta(days=30)
+        with get_session() as session:
+            event_types = session.query(EventType).all()
+            event_type_map = {et.name: et.id for et in event_types}
 
-        for event in events:
-            month_key = event.date.strftime("%B").lower()
-            if month_key in months:
-                months[month_key]["total_events"] += 1
+            months = {}
+            current_date = start_date
+            while current_date <= end_date:
+                month_key = current_date.strftime("%B").lower()
+                if month_key not in months:
+                    months[month_key] = {
+                        "total_visits": 0,
+                        "total_events": 0,
+                        "offsite_events": 0,
+                        "open_space_events": 0,
+                        "online_events": 0,
+                        "total_attendees": 0,
+                        "child_attendees": 0,
+                        "at_risk_teens": 0,
+                        "club_info": "0/0/0"
+                    }
+                current_date += timedelta(days=30)
 
-        for attendance in attendances:
-            month_key = attendance.event.date.strftime("%B").lower()
-            if month_key in months:
-                months[month_key]["total_attendees"] += attendance.total_attendees or 0
-                months[month_key]["child_attendees"] += attendance.child_attendees or 0
-                months[month_key]["at_risk_teens"] += attendance.at_risk_teens or 0
+            for event in events:
+                month_key = event.date.strftime("%B").lower()
+                if month_key in months:
+                    months[month_key]["total_events"] += 1
+                    if event.event_type:
+                        if event.event_type.name == "Выездное":
+                            months[month_key]["offsite_events"] += 1
+                        elif event.event_type.name == "На открытых площадках":
+                            months[month_key]["open_space_events"] += 1
+                        elif event.event_type.name == "Онлайн":
+                            months[month_key]["online_events"] += 1
 
-        total_visits = 0
-        total_events = 0
-        total_attendees = 0
-        total_child_attendees = 0
-        total_risk_teens = 0
-        total_club_activities = 0
-        total_club_participants = 0
-        total_risk_teens_clubs = 0
+            for attendance in attendances:
+                month_key = attendance.event.date.strftime("%B").lower()
+                if month_key in months:
+                    months[month_key]["total_attendees"] += attendance.total_attendees or 0
+                    months[month_key]["child_attendees"] += attendance.child_attendees or 0
+                    months[month_key]["at_risk_teens"] += attendance.at_risk_teens or 0
+                    months[month_key]["total_visits"] += attendance.total_attendees or 0
 
-        for month_key, data in months.items():
-            month_ru = MONTHS_RU[month_key]
-            club_info = f"{data['club_activities']}/{data['club_participants']}/{data['risk_teens_clubs']}" if data['club_activities'] > 0 else "-"
+            total_visits = 0
+            total_events = 0
+            total_offsite_events = 0
+            total_open_space_events = 0
+            total_online_events = 0
+            total_attendees = 0
+            total_child_attendees = 0
+            total_risk_teens = 0
+
+            for month_key, data in months.items():
+                month_ru = MONTHS_RU.get(month_key, month_key.capitalize())
+                table.append([
+                    month_ru,
+                    data["total_visits"],
+                    "",
+                    data["total_events"],
+                    data["offsite_events"],
+                    data["open_space_events"],
+                    "",
+                    data["online_events"],
+                    data["total_attendees"],
+                    data["child_attendees"],
+                    data["at_risk_teens"],
+                    data["club_info"]
+                ])
+                total_visits += data["total_visits"]
+                total_events += data["total_events"]
+                total_offsite_events += data["offsite_events"]
+                total_open_space_events += data["open_space_events"]
+                total_online_events += data["online_events"]
+                total_attendees += data["total_attendees"]
+                total_child_attendees += data["child_attendees"]
+                total_risk_teens += data["at_risk_teens"]
+
             table.append([
-                month_ru,
-                data['total_visits'],
-                data['total_events'],
-                data['total_attendees'],
-                data['child_attendees'],
-                data['at_risk_teens'],
-                club_info
+                "ИТОГО по ЦБС",
+                total_visits,
+                "",
+                total_events,
+                total_offsite_events,
+                total_open_space_events,
+                "",
+                total_online_events,
+                total_attendees,
+                total_child_attendees,
+                total_risk_teens,
+                "0/0/0"
             ])
-            total_visits += data['total_visits']
-            total_events += data['total_events']
-            total_attendees += data['total_attendees']
-            total_child_attendees += data['child_attendees']
-            total_risk_teens += data['at_risk_teens']
-            total_club_activities += data['club_activities']
-            total_club_participants += data['club_participants']
-            total_risk_teens_clubs += data['risk_teens_clubs']
 
-        table.append([
-            "ИТОГО по ЦБС",
-            total_visits,
-            total_events,
-            total_attendees,
-            total_child_attendees,
-            total_risk_teens,
-            f"{total_club_activities}/{total_club_participants}/{total_risk_teens_clubs}" if total_club_activities > 0 else "-"
-        ])
-
-        col_widths = [40, 30, 30, 30, 30, 30, 40]
+        col_widths = [50, 30, 20, 20, 20, 20, 20, 20, 20, 20, 20, 30]
         return {'header': header, 'table': table, 'col_widths': col_widths}
 
-    def generate_digital_indicators_by_directions_report(self, events, attendances, start_date, end_date, institution_name, direction_name, audience_name, format_name):
+    def generate_digital_indicators_by_directions_report(self, events, attendances, start_date, end_date, institution_name, direction_name, audience_name, format_name, event_type_name):
         header = [
-            "Цифровые показатели (по направлениям) по посещениям и массовой работе",
+            f"Цифровые показатели массовой работы, {start_date.year}",
             f"Период: {start_date.strftime('%d.%m.%Y')} - {end_date.strftime('%d.%m.%Y')}",
             f"Учреждение: {institution_name}",
             f"Направление: {direction_name}",
             f"Аудитория: {audience_name}",
-            f"Формат: {format_name}"
+            f"Формат: {format_name}",
+            f"Форма мероприятия: {event_type_name}"
         ]
 
         table = [
             [
                 "Направления",
-                "Количество массовых мероприятий, всего",
-                "Посещение на массовых мероприятиях",
-                "Количество массовых мероприятий для детей",
-                "Посещение на детских массовых мероприятиях",
-                "Количество культ-досуговых мероприятий",
-                "Посещение на культ-досуговых мероприятиях",
-                "Количество информ-просветительских мероприятий",
-                "Посещение на информ-просветительских мероприятиях"
+                "Мероприятия, всего",
+                "Посещения",
+                "Мероприятия для детей",
+                "Посещения детей",
+                "Культ-досуговые",
+                "",
+                "Информ-просветительские",
+                ""
             ],
-
+            [
+                "",
+                "",
+                "",
+                "",
+                "",
+                "Мероприятия",
+                "Посещения",
+                "Мероприятия",
+                "Посещения"
+            ]
         ]
 
         predefined_directions = [
-            "Содействие духовному развитию личности и нравственному воспитанию",
-            "Педагогика, Этика, Культура поведения",
-            "Летние чтения – 202__",
+            "Духовное развитие и нравственное воспитание",
+            "Педагогика, этика, культура поведения",
+            f"Летние чтения – {start_date.year}",
             "Пропаганда художественной литературы",
             "Эстетическое воспитание",
-            "В помощь школьной программе, День знаний",
+            "Помощь школьной программе, День знаний",
             "Продвижение исторических знаний",
             "Патриотическое воспитание",
             "Формирование правовой культуры",
-            "Развитие толерантности и культуры межнационального общения",
+            "Толерантность и межнациональное общение",
             "Здоровый образ жизни",
             "Спорт",
-            "Молодежная политика. Социализация личности. Профориентация",
-            "Наука и техника.",
+            "Молодёжная политика, социализация, профориентация",
+            "Наука и техника",
             "Экологическое просвещение",
-            "Краеведение. Градоведение",
-            "Мероприятия по формированию информационной культуры пользователей"
+            "Краеведение, градоведение",
+            "Формирование информационной культуры"
         ]
 
-        directions = {direction: {
-            "total_events": 0,
-            "total_attendees": 0,
-            "child_events": 0,
-            "child_attendees": 0,
-            "cultural_events": 0,
-            "cultural_attendees": 0,
-            "info_events": 0,
-            "info_attendees": 0
-        } for direction in predefined_directions}
+        with get_session() as session:
+            directions = {direction: {
+                "total_events": 0,
+                "total_attendees": 0,
+                "child_events": 0,
+                "child_attendees": 0,
+                "cultural_events": 0,
+                "cultural_attendees": 0,
+                "info_events": 0,
+                "info_attendees": 0
+            } for direction in predefined_directions}
 
-        for event in events:
-            if event.direction and event.direction.name in directions:
-                direction = event.direction.name
-                directions[direction]["total_events"] += 1
+            for event in events:
+                if event.direction and event.direction.name in directions:
+                    direction = event.direction.name
+                    directions[direction]["total_events"] += 1
+                    if event.target_audience and event.target_audience.name == "Дети":
+                        directions[direction]["child_events"] += 1
+                    if event.classification:
+                        if event.classification.name == "Культ-досуговые":
+                            directions[direction]["cultural_events"] += 1
+                        elif event.classification.name == "Информ-просветительские":
+                            directions[direction]["info_events"] += 1
 
-                if event.target_audience and event.target_audience.name == "Дети":
-                    directions[direction]["child_events"] += 1
+            for attendance in attendances:
+                event = attendance.event
+                if event.direction and event.direction.name in directions:
+                    direction = event.direction.name
+                    directions[direction]["total_attendees"] += attendance.total_attendees or 0
+                    if event.target_audience and event.target_audience.name == "Дети":
+                        directions[direction]["child_attendees"] += attendance.total_attendees or 0
+                    if event.classification:
+                        if event.classification.name == "Культ-досуговые":
+                            directions[direction]["cultural_attendees"] += attendance.total_attendees or 0
+                        elif event.classification.name == "Информ-просветительские":
+                            directions[direction]["info_attendees"] += attendance.total_attendees or 0
 
-                if event.classification:
-                    if event.classification.name == "Культ-досуговые":
-                        directions[direction]["cultural_events"] += 1
-                    elif event.classification.name == "Информ-просветительские":
-                        directions[direction]["info_events"] += 1
+            total_events = 0
+            total_attendees = 0
+            total_child_events = 0
+            total_child_attendees = 0
+            total_cultural_events = 0
+            total_cultural_attendees = 0
+            total_info_events = 0
+            total_info_attendees = 0
 
-        for attendance in attendances:
-            event = attendance.event
-            if event.direction and event.direction.name in directions:
-                direction = event.direction.name
-                directions[direction]["total_attendees"] += attendance.total_attendees or 0
+            for direction in predefined_directions:
+                data = directions[direction]
+                table.append([
+                    direction,
+                    data["total_events"],
+                    data["total_attendees"],
+                    data["child_events"],
+                    data["child_attendees"],
+                    data["cultural_events"],
+                    data["cultural_attendees"],
+                    data["info_events"],
+                    data["info_attendees"]
+                ])
+                total_events += data["total_events"]
+                total_attendees += data["total_attendees"]
+                total_child_events += data["child_events"]
+                total_child_attendees += data["child_attendees"]
+                total_cultural_events += data["cultural_events"]
+                total_cultural_attendees += data["cultural_attendees"]
+                total_info_events += data["info_events"]
+                total_info_attendees += data["info_attendees"]
 
-                if event.target_audience and event.target_audience.name == "Дети":
-                    directions[direction]["child_attendees"] += attendance.total_attendees or 0
-
-                if event.classification:
-                    if event.classification.name == "Культ-досуговые":
-                        directions[direction]["cultural_attendees"] += attendance.total_attendees or 0
-                    elif event.classification.name == "Информ-просветительских":
-                        directions[direction]["info_attendees"] += attendance.total_attendees or 0
-
-        total_events = 0
-        total_attendees = 0
-        total_child_events = 0
-        total_child_attendees = 0
-        total_cultural_events = 0
-        total_cultural_attendees = 0
-        total_info_events = 0
-        total_info_attendees = 0
-
-        for direction in predefined_directions:
-            data = directions[direction]
             table.append([
-                direction,
-                data["total_events"],
-                data["total_attendees"],
-                data["child_events"],
-                data["child_attendees"],
-                data["cultural_events"],
-                data["cultural_attendees"],
-                data["info_events"],
-                data["info_attendees"]
+                "ИТОГО",
+                total_events,
+                total_attendees,
+                total_child_events,
+                total_child_attendees,
+                total_cultural_events,
+                total_cultural_attendees,
+                total_info_events,
+                total_info_attendees
             ])
-            total_events += data["total_events"]
-            total_attendees += data["total_attendees"]
-            total_child_events += data["child_events"]
-            total_child_attendees += data["child_attendees"]
-            total_cultural_events += data["cultural_events"]
-            total_cultural_attendees += data["cultural_attendees"]
-            total_info_events += data["info_events"]
-            total_info_attendees += data["info_attendees"]
 
-        table.append([
-            "ИТОГО",
-            total_events,
-            total_attendees,
-            total_child_events,
-            total_child_attendees,
-            total_cultural_events,
-            total_cultural_attendees,
-            total_info_events,
-            total_info_attendees
-        ])
-
-        col_widths = [60, 30, 30, 30, 30, 30, 30, 30, 30]
+        col_widths = [70, 30, 30, 30, 30, 30, 30, 30, 30]
         return {'header': header, 'table': table, 'col_widths': col_widths}
+
 
     def add_record(self):
         table_name = self.table_selector.currentText()
@@ -1279,63 +1553,13 @@ class MainWindow(QMainWindow):
                 QMessageBox.critical(self, "Ошибка", f"Не удалось открыть диалог добавления: {str(e)}")
 
     def edit_record(self):
-        selected_rows = self.admin_table.selectionModel().selectedRows()
-        if not selected_rows:
-            QMessageBox.warning(self, "Предупреждение", "Выберите запись для редактирования")
-            return
+            selected_rows = self.admin_table.selectionModel().selectedRows()
+            if not selected_rows:
+                QMessageBox.warning(self, "Предупреждение", "Выберите запись для редактирования")
+                return
 
-        row = selected_rows[0].row()
-        table_name = self.table_selector.currentText()
-        with get_session() as session:
-            try:
-                record_id = self.admin_table.item(row, 0).data(Qt.UserRole)
-                if table_name == "Расшифровка":
-                    record = session.query(Decoding).filter(Decoding.id == record_id).first()
-                elif table_name == "Учреждение":
-                    record = session.query(Institution).filter(Institution.id == record_id).first()
-                elif table_name == "Пользователь":
-                    record = session.query(User).filter(User.id == record_id).first()
-                elif table_name == "Роль":
-                    record = session.query(Role).filter(Role.id == record_id).first()
-                elif table_name == "Форматы":
-                    record = session.query(EventFormat).filter(EventFormat.id == record_id).first()
-                elif table_name == "Классификации":
-                    record = session.query(EventClassification).filter(EventClassification.id == record_id).first()
-                elif table_name == "Направления":
-                    record = session.query(ActivityDirection).filter(EventClassification.id == record_id).first()
-                elif table_name == "Типы мероприятий":
-                    record = session.query(EventType).filter(EventType.id == record_id).first()
-                elif table_name == "Аудитории":
-                    record = session.query(TargetAudience).filter(TargetAudience.id == record_id).first()
-                elif table_name == "Места проведения":
-                    record = session.query(Venue).filter(Venue.id == record_id).first()
-                else:
-                    QMessageBox.warning(self, "Ошибка", "Неизвестный справочник")
-                    return
-
-                if not record:
-                    QMessageBox.warning(self, "Ошибка", "Запись не найдена")
-                    return
-
-                from dialogs.edit_record_dialog import EditRecordDialog
-                dialog = EditRecordDialog(self, table_name, record, session)
-                if dialog.exec():
-                    self.refresh_table()
-                    self.refresh_combos()
-            except Exception as e:
-                QMessageBox.critical(self, "Ошибка", f"Не удалось открыть диалог редактирования: {str(e)}")
-
-    def delete_record(self):
-        selected_rows = self.admin_table.selectionModel().selectedRows()
-        if not selected_rows:
-            QMessageBox.warning(self, "Предупреждение", "Выберите запись для удаления")
-            return
-
-        row = selected_rows[0].row()
-        table_name = self.table_selector.currentText()
-        reply = QMessageBox.question(self, "Подтверждение", "Вы уверены, что хотите удалить эту запись?",
-                                     QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-        if reply == QMessageBox.Yes:
+            row = selected_rows[0].row()
+            table_name = self.table_selector.currentText()
             with get_session() as session:
                 try:
                     record_id = self.admin_table.item(row, 0).data(Qt.UserRole)
@@ -1360,7 +1584,124 @@ class MainWindow(QMainWindow):
                     elif table_name == "Места проведения":
                         record = session.query(Venue).filter(Venue.id == record_id).first()
                     else:
-                        QMessageBox.warning(self, "Ошибка", "Неизвестный справочник")
+                        QMessageBox.critical(self, "Ошибка", "Неизвестная таблица")
+                        return
+
+                    if not record:
+                        QMessageBox.warning(self, "Ошибка", "Запись не найдена")
+                        return
+
+                    dialog = AddRecordDialog(self, table_name, session, record)
+                    if dialog.exec():
+                        session.commit()
+                        self.refresh_table()
+                        self.refresh_combos()
+                except Exception as e:
+                    session.rollback()
+                    QMessageBox.critical(self, "Ошибка", f"Не удалось отредактировать запись: {str(e)}")
+
+    def refresh_table(self):
+        table_name = self.table_selector.currentText()
+        with get_session() as session:
+            try:
+                if table_name == "Расшифровка":
+                    records = session.query(Decoding).all()
+                    headers = ["Название", "Описание"]
+                    self.populate_admin_table(records, headers, ["name", "description"], [150, 300])
+                elif table_name == "Учреждение":
+                    records = session.query(Institution).all()
+                    headers = ["Название", "Адрес"]
+                    self.populate_admin_table(records, headers, ["name", "address"], [150, 300])
+                elif table_name == "Пользователь":
+                    records = session.query(User).options(joinedload(User.role)).all()
+                    headers = ["Логин", "Роль"]
+                    self.populate_admin_table(records, headers, ["login", "role.name"], [150, 150])
+                elif table_name == "Роль":
+                    records = session.query(Role).all()
+                    headers = ["Название"]
+                    self.populate_admin_table(records, headers, ["name"], [300])
+                elif table_name == "Форматы":
+                    records = session.query(EventFormat).all()
+                    headers = ["Название"]
+                    self.populate_admin_table(records, headers, ["name"], [300])
+                elif table_name == "Классификации":
+                    records = session.query(EventClassification).all()
+                    headers = ["Название"]
+                    self.populate_admin_table(records, headers, ["name"], [300])
+                elif table_name == "Направления":
+                    records = session.query(ActivityDirection).all()
+                    headers = ["Название"]
+                    self.populate_admin_table(records, headers, ["name"], [300])
+                elif table_name == "Типы мероприятий":
+                    records = session.query(EventType).all()
+                    headers = ["Название"]
+                    self.populate_admin_table(records, headers, ["name"], [300])
+                elif table_name == "Аудитории":
+                    records = session.query(TargetAudience).all()
+                    headers = ["Название"]
+                    self.populate_admin_table(records, headers, ["name"], [300])
+                elif table_name == "Места проведения":
+                    records = session.query(Venue).all()
+                    headers = ["Название"]
+                    self.populate_admin_table(records, headers, ["name"], [300])
+            except Exception as e:
+                QMessageBox.critical(self, "Ошибка", f"Не удалось обновить таблицу: {str(e)}")
+
+    def populate_admin_table(self, records, headers, attributes, col_widths=None):
+        self.admin_table.setRowCount(len(records))
+        self.admin_table.setColumnCount(len(headers))
+        self.admin_table.setHorizontalHeaderLabels(headers)
+        self.admin_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+
+        for row, record in enumerate(records):
+            for col, attr in enumerate(attributes):
+                value = record
+                for part in attr.split("."):
+                    value = getattr(value, part, "")
+                item = QTableWidgetItem(str(value or ""))
+                item.setData(Qt.UserRole, record.id)
+                self.admin_table.setItem(row, col, item)
+
+        if col_widths:
+            for col, width in enumerate(col_widths):
+                self.admin_table.setColumnWidth(col, width)
+
+    def delete_record(self):
+        selected_rows = self.admin_table.selectionModel().selectedRows()
+        if not selected_rows:
+            QMessageBox.warning(self, "Предупреждение", "Выберите запись для удаления")
+            return
+
+        row = selected_rows[0].row()
+        record_id = self.admin_table.item(row, 0).data(Qt.UserRole)
+        table_name = self.table_selector.currentText()
+        reply = QMessageBox.question(self, "Подтверждение", "Вы уверены, что хотите удалить эту запись?",
+                                     QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if reply == QMessageBox.Yes:
+            with get_session() as session:
+                try:
+                    if table_name == "Расшифровка":
+                        record = session.query(Decoding).filter(Decoding.id == record_id).first()
+                    elif table_name == "Учреждение":
+                        record = session.query(Institution).filter(Institution.id == record_id).first()
+                    elif table_name == "Пользователь":
+                        record = session.query(User).filter(User.id == record_id).first()
+                    elif table_name == "Роль":
+                        record = session.query(Role).filter(Role.id == record_id).first()
+                    elif table_name == "Форматы":
+                        record = session.query(EventFormat).filter(EventFormat.id == record_id).first()
+                    elif table_name == "Классификации":
+                        record = session.query(EventClassification).filter(EventClassification.id == record_id).first()
+                    elif table_name == "Направления":
+                        record = session.query(ActivityDirection).filter(ActivityDirection.id == record_id).first()
+                    elif table_name == "Типы мероприятий":
+                        record = session.query(EventType).filter(EventType.id == record_id).first()
+                    elif table_name == "Аудитории":
+                        record = session.query(TargetAudience).filter(TargetAudience.id == record_id).first()
+                    elif table_name == "Места проведения":
+                        record = session.query(Venue).filter(Venue.id == record_id).first()
+                    else:
+                        QMessageBox.critical(self, "Ошибка", "Неизвестная таблица")
                         return
 
                     if record:
@@ -1370,197 +1711,87 @@ class MainWindow(QMainWindow):
                         self.refresh_table()
                         self.refresh_combos()
                     else:
-                        raise ValueError("Запись не найдена")
+                        QMessageBox.warning(self, "Ошибка", "Запись не найдена")
                 except Exception as e:
                     session.rollback()
                     QMessageBox.critical(self, "Ошибка", f"Не удалось удалить запись: {str(e)}")
 
-    def refresh_table(self):
-        with get_session() as session:
-            try:
-                table_name = self.table_selector.currentText()
-                if table_name == "Расшифровка":
-                    records = session.query(Decoding).all()
-                    self.admin_table.setColumnCount(2)
-                    self.admin_table.setHorizontalHeaderLabels(["Полное название", "Краткое название"])
-                    self.admin_table.setRowCount(len(records))
-                    for row, record in enumerate(records):
-                        item0 = QTableWidgetItem(record.full_name or "")
-                        item0.setData(Qt.UserRole, record.id)
-                        self.admin_table.setItem(row, 0, item0)
-                        self.admin_table.setItem(row, 1, QTableWidgetItem(record.short_name or ""))
-
-                elif table_name == "Учреждение":
-                    records = session.query(Institution).all()
-                    self.admin_table.setColumnCount(3)
-                    self.admin_table.setHorizontalHeaderLabels(["Название", "Расшифровка", "Пользователь"])
-                    self.admin_table.setRowCount(len(records))
-                    for row, record in enumerate(records):
-                        item0 = QTableWidgetItem(record.name or "")
-                        item0.setData(Qt.UserRole, record.id)
-                        self.admin_table.setItem(row, 0, item0)
-                        self.admin_table.setItem(row, 1, QTableWidgetItem(record.decoding.full_name if record.decoding else ""))
-                        self.admin_table.setItem(row, 2, QTableWidgetItem(record.user.username if record.user else ""))
-
-                elif table_name == "Пользователь":
-                    records = session.query(User).all()
-                    self.admin_table.setColumnCount(2)
-                    self.admin_table.setHorizontalHeaderLabels(["Имя пользователя", "Роль"])
-                    self.admin_table.setRowCount(len(records))
-                    for row, record in enumerate(records):
-                        item0 = QTableWidgetItem(record.username or "")
-                        item0.setData(Qt.UserRole, record.id)
-                        self.admin_table.setItem(row, 0, item0)
-                        self.admin_table.setItem(row, 1, QTableWidgetItem(record.role.name if record.role else ""))
-
-                elif table_name == "Роль":
-                    records = session.query(Role).all()
-                    self.admin_table.setColumnCount(1)
-                    self.admin_table.setHorizontalHeaderLabels(["Название"])
-                    self.admin_table.setRowCount(len(records))
-                    for row, record in enumerate(records):
-                        item0 = QTableWidgetItem(record.name or "")
-                        item0.setData(Qt.UserRole, record.id)
-                        self.admin_table.setItem(row, 0, item0)
-
-                elif table_name == "Форматы":
-                    records = session.query(EventFormat).all()
-                    self.admin_table.setColumnCount(1)
-                    self.admin_table.setHorizontalHeaderLabels(["Название"])
-                    self.admin_table.setRowCount(len(records))
-                    for row, record in enumerate(records):
-                        item0 = QTableWidgetItem(record.name or "")
-                        item0.setData(Qt.UserRole, record.id)
-                        self.admin_table.setItem(row, 0, item0)
-
-                elif table_name == "Классификации":
-                    records = session.query(EventClassification).all()
-                    self.admin_table.setColumnCount(1)
-                    self.admin_table.setHorizontalHeaderLabels(["Название"])
-                    self.admin_table.setRowCount(len(records))
-                    for row, record in enumerate(records):
-                        item0 = QTableWidgetItem(record.name or "")
-                        item0.setData(Qt.UserRole, record.id)
-                        self.admin_table.setItem(row, 0, item0)
-
-                elif table_name == "Направления":
-                    records = session.query(ActivityDirection).all()
-                    self.admin_table.setColumnCount(1)
-                    self.admin_table.setHorizontalHeaderLabels(["Название"])
-                    self.admin_table.setRowCount(len(records))
-                    for row, record in enumerate(records):
-                        item0 = QTableWidgetItem(record.name or "")
-                        item0.setData(Qt.UserRole, record.id)
-                        self.admin_table.setItem(row, 0, item0)
-
-                elif table_name == "Типы мероприятий":
-                    records = session.query(EventType).all()
-                    self.admin_table.setColumnCount(1)
-                    self.admin_table.setHorizontalHeaderLabels(["Название"])
-                    self.admin_table.setRowCount(len(records))
-                    for row, record in enumerate(records):
-                        item0 = QTableWidgetItem(record.name or "")
-                        item0.setData(Qt.UserRole, record.id)
-                        self.admin_table.setItem(row, 0, item0)
-
-                elif table_name == "Аудитории":
-                    records = session.query(TargetAudience).all()
-                    self.admin_table.setColumnCount(1)
-                    self.admin_table.setHorizontalHeaderLabels(["Название"])
-                    self.admin_table.setRowCount(len(records))
-                    for row, record in enumerate(records):
-                        item0 = QTableWidgetItem(record.name or "")
-                        item0.setData(Qt.UserRole, record.id)
-                        self.admin_table.setItem(row, 0, item0)
-
-                elif table_name == "Места проведения":
-                    records = session.query(Venue).all()
-                    self.admin_table.setColumnCount(1)
-                    self.admin_table.setHorizontalHeaderLabels(["Название"])
-                    self.admin_table.setRowCount(len(records))
-                    for row, record in enumerate(records):
-                        item0 = QTableWidgetItem(record.name or "")
-                        item0.setData(Qt.UserRole, record.id)
-                        self.admin_table.setItem(row, 0, item0)
-
-                self.admin_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-            except Exception as e:
-                QMessageBox.critical(self, "Ошибка", f"Не удалось обновить таблицу: {str(e)}")
-
     def refresh_combos(self):
         with get_session() as session:
             try:
-                # Обновление фильтра учреждений в таблице
+                institutions = session.query(Institution).all()
                 current_institution = self.institution_filter_table.currentText()
                 self.institution_filter_table.clear()
                 self.institution_filter_table.addItem("Все учреждения")
-                institutions = session.query(Institution).all()
                 self.institution_filter_table.addItems([i.name for i in institutions])
-                if current_institution in ["Все учреждения"] + [i.name for i in institutions]:
+                if current_institution in [i.name for i in institutions]:
                     self.institution_filter_table.setCurrentText(current_institution)
 
-                # Обновление фильтра направлений в таблице
+                directions = session.query(ActivityDirection).all()
                 current_direction = self.direction_filter_table.currentText()
                 self.direction_filter_table.clear()
                 self.direction_filter_table.addItem("Все направления")
-                directions = session.query(ActivityDirection).all()
                 self.direction_filter_table.addItems([d.name for d in directions])
-                if current_direction in ["Все направления"] + [d.name for d in directions]:
+                if current_direction in [d.name for d in directions]:
                     self.direction_filter_table.setCurrentText(current_direction)
 
-                # Обновление фильтра аудиторий в таблице
+                audiences = session.query(TargetAudience).all()
                 current_audience = self.audience_filter_table.currentText()
                 self.audience_filter_table.clear()
                 self.audience_filter_table.addItem("Все аудитории")
-                audiences = session.query(TargetAudience).all()
                 self.audience_filter_table.addItems([a.name for a in audiences])
-                if current_audience in ["Все аудитории"] + [a.name for a in audiences]:
+                if current_audience in [a.name for a in audiences]:
                     self.audience_filter_table.setCurrentText(current_audience)
 
-                # Обновление фильтра форматов в таблице
+                formats = session.query(EventFormat).all()
                 current_format = self.format_filter_table.currentText()
                 self.format_filter_table.clear()
                 self.format_filter_table.addItem("Все форматы")
-                formats = session.query(EventFormat).all()
                 self.format_filter_table.addItems([f.name for f in formats])
-                if current_format in ["Все форматы"] + [f.name for f in formats]:
+                if current_format in [f.name for f in formats]:
                     self.format_filter_table.setCurrentText(current_format)
 
-                # Обновление фильтра учреждений в отчётах
-                current_institution_report = self.institution_filter.currentText()
+                event_types = session.query(EventType).all()
+                current_event_type = self.event_type_filter_table.currentText()
+                self.event_type_filter_table.clear()
+                self.event_type_filter_table.addItem("Все формы")
+                self.event_type_filter_table.addItems([et.name for et in event_types])
+                if current_event_type in [et.name for et in event_types]:
+                    self.event_type_filter_table.setCurrentText(current_event_type)
+
+                current_institution = self.institution_filter.currentText()
                 self.institution_filter.clear()
                 self.institution_filter.addItem("Все учреждения")
-                institutions = session.query(Institution).all()
                 self.institution_filter.addItems([i.name for i in institutions])
-                if current_institution_report in ["Все учреждения"] + [i.name for i in institutions]:
-                    self.institution_filter.setCurrentText(current_institution_report)
+                if current_institution in [i.name for i in institutions]:
+                    self.institution_filter.setCurrentText(current_institution)
 
-                # Обновление фильтра направлений в отчётах
-                current_direction_report = self.direction_filter.currentText()
+                current_direction = self.direction_filter.currentText()
                 self.direction_filter.clear()
                 self.direction_filter.addItem("Все направления")
-                directions = session.query(ActivityDirection).all()
                 self.direction_filter.addItems([d.name for d in directions])
-                if current_direction_report in ["Все направления"] + [d.name for d in directions]:
-                    self.direction_filter.setCurrentText(current_direction_report)
+                if current_direction in [d.name for d in directions]:
+                    self.direction_filter.setCurrentText(current_direction)
 
-                # Обновление фильтра аудиторий в отчётах
-                current_audience_report = self.audience_filter.currentText()
+                current_audience = self.audience_filter.currentText()
                 self.audience_filter.clear()
                 self.audience_filter.addItem("Все аудитории")
-                audiences = session.query(TargetAudience).all()
                 self.audience_filter.addItems([a.name for a in audiences])
-                if current_audience_report in ["Все аудитории"] + [a.name for a in audiences]:
-                    self.audience_filter.setCurrentText(current_audience_report)
+                if current_audience in [a.name for a in audiences]:
+                    self.audience_filter.setCurrentText(current_audience)
 
-                # Обновление фильтра форматов в отчётах
-                current_format_report = self.format_filter.currentText()
+                current_format = self.format_filter.currentText()
                 self.format_filter.clear()
                 self.format_filter.addItem("Все форматы")
-                formats = session.query(EventFormat).all()
                 self.format_filter.addItems([f.name for f in formats])
-                if current_format_report in ["Все форматы"] + [f.name for f in formats]:
-                    self.format_filter.setCurrentText(current_format_report)
+                if current_format in [f.name for f in formats]:
+                    self.format_filter.setCurrentText(current_format)
 
+                current_event_type = self.event_type_filter.currentText()
+                self.event_type_filter.clear()
+                self.event_type_filter.addItem("Все формы")
+                self.event_type_filter.addItems([et.name for et in event_types])
+                if current_event_type in [et.name for et in event_types]:
+                    self.event_type_filter.setCurrentText(current_event_type)
             except Exception as e:
                 QMessageBox.critical(self, "Ошибка", f"Не удалось обновить выпадающие списки: {str(e)}")
