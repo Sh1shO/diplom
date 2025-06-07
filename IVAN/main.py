@@ -8,23 +8,23 @@ from PySide6.QtWidgets import (
     QTabWidget, QTableView, QGroupBox, QFileDialog, QSizePolicy, QCheckBox,
     QSpacerItem, QListWidgetItem
 )
-from PySide6.QtCore import Qt, QDate
+from PySide6.QtCore import Qt, QDate, QTimer
 from PySide6.QtGui import QIcon, QPixmap, QStandardItemModel, QStandardItem, QBrush, QColor
 from sqlalchemy.orm import joinedload
 from db import (
     User, Unit, ProductType, DeliveryCondition, Supplier, Product, Delivery,
-    ProductInDelivery, Session
+    ProductInDelivery, Session, Role
 )
-from styles import STYLESHEET
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.lib.units import mm
+from styles import STYLESHEET
 
-# Настройка логирования
+# Logging setup
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class LoginDialog(QDialog):
@@ -133,7 +133,7 @@ class AddEditDeliveryDialog(QDialog):
         super().__init__()
         self.setWindowTitle("Добавить поставку" if not delivery else "Редактировать поставку")
         self.setWindowIcon(QIcon("./logo.svg"))
-        self.setMinimumSize(1000, 900)
+        self.setMinimumSize(1800, 900)
         self.delivery = delivery
         layout = QVBoxLayout(self)
         layout.setSpacing(10)
@@ -142,6 +142,8 @@ class AddEditDeliveryDialog(QDialog):
         self.supplier = QComboBox()
         self.supplier.setMinimumWidth(300)
         self.supplier.setFixedHeight(35)
+        self.supplier.setMaxVisibleItems(10)
+        self.supplier.setStyleSheet("QComboBox QListView { max-height: 200px; }")
         self.planned_date = QDateEdit(QDate.currentDate())
         self.planned_date.setCalendarPopup(True)
         self.planned_date.setFixedHeight(35)
@@ -173,12 +175,13 @@ class AddEditDeliveryDialog(QDialog):
         layout.addLayout(form_layout)
         self.actual_date_check.toggled.connect(self.actual_date.setEnabled)
         self.products_table = QTableWidget()
-        self.products_table.setColumnCount(5)
+        self.products_table.setColumnCount(6)
         self.products_table.setHorizontalHeaderLabels([
-            "Товар", "План. кол-во", "План. цена", "Факт. кол-во", "Факт. цена"
+            "Товар", "План. кол-во", "План. цена", "Факт. кол-во", "Факт. цена", "Причина отказа"
         ])
         self.products_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.products_table.setColumnWidth(0, 250)
+        self.products_table.setColumnWidth(5, 200)
         layout.addWidget(self.products_table)
         if delivery:
             with Session() as s:
@@ -188,6 +191,8 @@ class AddEditDeliveryDialog(QDialog):
                     combo = QComboBox()
                     combo.setMinimumWidth(250)
                     combo.setFixedHeight(35)
+                    combo.setMaxVisibleItems(10)
+                    combo.setStyleSheet("QComboBox QListView { max-height: 200px; }")
                     with Session() as s:
                         all_products = s.query(Product).all()
                         combo.addItem("Выберите", None)
@@ -199,8 +204,7 @@ class AddEditDeliveryDialog(QDialog):
                     self.products_table.setItem(row, 2, QTableWidgetItem(f"{pid.planned_price or 0:.2f}"))
                     self.products_table.setItem(row, 3, QTableWidgetItem(str(pid.actual_quantity or 0)))
                     self.products_table.setItem(row, 4, QTableWidgetItem(f"{pid.actual_price or 0:.2f}"))
-                    self.products_table.setRowHeight(row, 50)
-                for row in range(self.products_table.rowCount()):
+                    self.products_table.setItem(row, 5, QTableWidgetItem(pid.rejection_reason or ""))
                     self.products_table.setRowHeight(row, 50)
         buttons_layout = QHBoxLayout()
         add_product = QPushButton("Добавить товар")
@@ -222,6 +226,8 @@ class AddEditDeliveryDialog(QDialog):
         combo = QComboBox()
         combo.setMinimumWidth(250)
         combo.setFixedHeight(35)
+        combo.setMaxVisibleItems(10)
+        combo.setStyleSheet("QComboBox QListView { max-height: 200px; }")
         with Session() as s:
             products = s.query(Product).all()
             combo.addItem("Выберите", None)
@@ -232,6 +238,7 @@ class AddEditDeliveryDialog(QDialog):
         self.products_table.setItem(row, 2, QTableWidgetItem("0.00"))
         self.products_table.setItem(row, 3, QTableWidgetItem("0"))
         self.products_table.setItem(row, 4, QTableWidgetItem("0.00"))
+        self.products_table.setItem(row, 5, QTableWidgetItem(""))
         self.products_table.setRowHeight(row, 50)
 
     def remove_product_row(self):
@@ -254,15 +261,17 @@ class AddEditDeliveryDialog(QDialog):
                 planned_price = float(self.products_table.item(row, 2).text() or 0)
                 actual_qty = int(self.products_table.item(row, 3).text() or 0)
                 actual_price = float(self.products_table.item(row, 4).text() or 0)
+                rejection_reason = self.products_table.item(row, 5).text() or None
             except ValueError as e:
                 logging.error(f"Ошибка парсинга данных таблицы: {e}")
-                planned_qty, planned_price, actual_qty, actual_price = 0, 0.0, 0, 0.0
+                planned_qty, planned_price, actual_qty, actual_price, rejection_reason = 0, 0.0, 0, 0.0, None
             products.append({
                 'product_id': product_id,
                 'planned_quantity': planned_qty,
                 'planned_price': planned_price,
                 'actual_quantity': actual_qty,
-                'actual_price': actual_price
+                'actual_price': actual_price,
+                'rejection_reason': rejection_reason
             })
         return {
             'supplier_id': self.supplier.currentData(),
@@ -272,28 +281,122 @@ class AddEditDeliveryDialog(QDialog):
             'products': products
         }
 
+class ChangePasswordDialog(QDialog):
+    def __init__(self, user):
+        super().__init__()
+        self.setWindowTitle("Смена пароля")
+        self.user = user
+        layout = QFormLayout(self)
+        self.old_password = QLineEdit()
+        self.old_password.setEchoMode(QLineEdit.Password)
+        self.new_password = QLineEdit()
+        self.new_password.setEchoMode(QLineEdit.Password)
+        self.confirm_password = QLineEdit()
+        self.confirm_password.setEchoMode(QLineEdit.Password)
+        save_button = QPushButton("Сохранить")
+        save_button.clicked.connect(self.save_password)
+        layout.addRow("Старый пароль:", self.old_password)
+        layout.addRow("Новый пароль:", self.new_password)
+        layout.addRow("Подтвердить пароль:", self.confirm_password)
+        layout.addRow(save_button)
+
+    def save_password(self):
+        old = self.old_password.text().strip()
+        new = self.new_password.text().strip()
+        confirm = self.confirm_password.text().strip()
+        if old != self.user.password:
+            QMessageBox.critical(self, "Ошибка", "Неверный старый пароль")
+            return
+        if new != confirm:
+            QMessageBox.critical(self, "Ошибка", "Пароли не совпадают")
+            return
+        if not new:
+            QMessageBox.critical(self, "Ошибка", "Новый пароль не может быть пустым")
+            return
+        with Session() as s:
+            try:
+                user = s.query(User).get(self.user.id)
+                user.password = new
+                s.commit()
+                QMessageBox.information(self, "Успех", "Пароль изменён")
+                self.accept()
+            except Exception as e:
+                s.rollback()
+                logging.error(f"Ошибка смены пароля: {e}")
+                QMessageBox.critical(self, "Ошибка", f"Не удалось сменить пароль: {str(e)}")
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Deliveries")
+        self.setWindowTitle("Цветочный магазин «Привет, я – букет»")
         self.setWindowIcon(QIcon("logo.svg"))
         self.current_user = None
         self.current_report = None
-        self.report_widget = None
+        self.report_widget = QWidget()  # Инициализируем явно
+        self.report_widget_layout = QVBoxLayout(self.report_widget)
+        preview_group = QGroupBox("")
+        preview_group.setObjectName("report_preview")
+        preview_layout = QVBoxLayout(preview_group)
+        self.report_view = QTableView()
+        preview_layout.addWidget(self.report_view)
+        save_layout = QHBoxLayout()
+        save_layout.addStretch()
+        save_report = QPushButton("Сохранить отчёт")
+        save_report.setMinimumWidth(150)
+        save_report.setFixedHeight(35)
+        save_report.clicked.connect(self.save_report)
+        save_layout.addWidget(save_report)
+        preview_layout.addLayout(save_layout)
+        self.report_widget_layout.addWidget(preview_group)
         self.show_login_dialog()
+        self.notification_timer = QTimer(self)
+        self.notification_timer.timeout.connect(self.check_active_deliveries)
+        self.notification_timer.start(30 * 60 * 1000)
 
     def show_login_dialog(self):
         dialog = LoginDialog()
         if dialog.exec_():
             username, password = dialog.get_credentials()
             with Session() as s:
-                user = s.query(User).filter_by(username=username, password=password).first()
+                user = s.query(User).join(Role).filter(User.username == username, User.password == password).first()
                 if user:
                     self.current_user = user
                     self.setup_ui()
+                    self.tabs.setCurrentIndex(self.tabs.indexOf(self.delivery_tab))
+                    QMessageBox.information(self, "Напоминание", "Не забудьте создать резервную копию базы данных!")
                 else:
                     QMessageBox.critical(self, "Ошибка", "Неверный логин или пароль")
                     self.show_login_dialog()
+
+    def check_active_deliveries(self):
+        with Session() as s:
+            start = self.delivery_start_date.date().toPython()
+            end = self.delivery_end_date.date().toPython()
+            active_deliveries = s.query(Delivery).options(joinedload(Delivery.supplier)).filter(
+                Delivery.planned_date >= start,
+                Delivery.planned_date <= end,
+                Delivery.actual_date.is_(None)
+            ).all()
+            self.notification_count = len(active_deliveries)
+            if self.notification_count > 0:
+                self.notification_button.setText(f"Уведомления ({self.notification_count})")
+            else:
+                self.notification_button.setText("Уведомления")
+            self.update_notification_list(active_deliveries)
+
+    def update_notification_list(self, deliveries):
+        self.notification_list.clear()
+        for d in deliveries:
+            supplier_name = d.supplier.name if d.supplier else "Неизвестно"
+            date_str = d.planned_date.strftime("%d.%m.%Y") if d.planned_date else "-"
+            text = f"Активная поставка: {supplier_name} - {date_str}"
+            item = QListWidgetItem(text)
+            item.setData(Qt.UserRole, d.id)
+            self.notification_list.addItem(item)
+
+    def show_notifications(self):
+        self.tabs.setCurrentIndex(self.tabs.indexOf(self.notification_tab))
+        self.check_active_deliveries()
 
     def setup_ui(self):
         central = QWidget()
@@ -304,174 +407,422 @@ class MainWindow(QMainWindow):
         self.tabs = QTabWidget()
         self.tabs.currentChanged.connect(self.on_tab_changed)
         left_layout.addWidget(self.tabs)
-        ref_tab = QWidget()
-        ref_layout = QVBoxLayout(ref_tab)
-        self.ref_list = QListWidget()
-        self.ref_list.addItems(["Единицы измерения", "Типы товаров", "Условия поставки", "Поставщики", "Товары"])
-        self.ref_list.currentItemChanged.connect(self.show_reference)
-        ref_layout.addWidget(self.ref_list)
-        self.tabs.addTab(ref_tab, "Справочники")
-        delivery_tab = QWidget()
-        delivery_layout = QVBoxLayout(delivery_tab)
-        filters_group = QGroupBox("")
-        filters_group.setObjectName("delivery_filters")
-        filters_group.setFixedHeight(200)
-        filters_group.setMinimumWidth(350)
-        filters_layout = QVBoxLayout(filters_group)
-        filters_layout.setSpacing(15)
-        filters_layout.setContentsMargins(20, 25, 20, 20)
-        start_row = QHBoxLayout()
-        start_label = QLabel("Дата с:")
-        start_label.setFixedWidth(80)
-        start_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        start_label.setStyleSheet("padding-right: 10px;")
-        self.delivery_start_date = QDateEdit(QDate.currentDate().addMonths(-1))
-        self.delivery_start_date.setCalendarPopup(True)
-        self.delivery_start_date.setFixedHeight(35)
-        start_row.addWidget(start_label)
-        start_row.addWidget(self.delivery_start_date)
-        filters_layout.addLayout(start_row)
-        end_row = QHBoxLayout()
-        end_label = QLabel("по:")
-        end_label.setFixedWidth(80)
-        end_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        end_label.setStyleSheet("padding-right: 10px;")
-        self.delivery_end_date = QDateEdit(QDate.currentDate())
-        self.delivery_end_date.setCalendarPopup(True)
-        self.delivery_end_date.setFixedHeight(35)
-        end_row.addWidget(end_label)
-        end_row.addWidget(self.delivery_end_date)
-        filters_layout.addLayout(end_row)
-        supplier_row = QHBoxLayout()
-        supplier_label = QLabel("Поставщик:")
-        supplier_label.setFixedWidth(80)
-        supplier_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        supplier_label.setStyleSheet("padding-right: 10px;")
-        self.delivery_supplier_filter = QComboBox()
-        self.delivery_supplier_filter.setFixedHeight(35)
-        self.delivery_supplier_filter.setMinimumWidth(300)
-        with Session() as s:
-            suppliers = s.query(Supplier).all()
-            self.delivery_supplier_filter.addItem("Все", None)
-            for sup in suppliers:
-                self.delivery_supplier_filter.addItem(sup.name, sup.id)
-        supplier_row.addWidget(supplier_label)
-        supplier_row.addWidget(self.delivery_supplier_filter)
-        filters_layout.addLayout(supplier_row)
-        delivery_layout.addWidget(filters_group)
-        self.delivery_list = QListWidget()
-        self.delivery_list.currentItemChanged.connect(self.show_delivery)
-        delivery_layout.addWidget(self.delivery_list)
-        add_delivery = QPushButton("Добавить поставку")
-        add_delivery.setObjectName("add_button")
-        add_delivery.clicked.connect(self.add_delivery)
-        delivery_layout.addWidget(add_delivery)
-        self.delivery_start_date.dateChanged.connect(self.update_deliveries)
-        self.delivery_end_date.dateChanged.connect(self.update_deliveries)
-        self.delivery_supplier_filter.currentIndexChanged.connect(self.update_deliveries)
-        self.tabs.addTab(delivery_tab, "Поставки")
-        report_tab = QWidget()
-        report_layout = QHBoxLayout(report_tab)
-        filters = QWidget()
-        filters_layout = QVBoxLayout(filters)
-        filters_group = QGroupBox("")
-        filters_group.setObjectName("report_filters")
-        filters_group.setFixedHeight(200)
-        filters_group.setMinimumWidth(350)
-        filters_group_layout = QVBoxLayout(filters_group)
-        filters_group_layout.setSpacing(15)
-        filters_group_layout.setContentsMargins(20, 25, 20, 20)
-        start_row = QHBoxLayout()
-        start_label = QLabel("Дата с:")
-        start_label.setFixedWidth(80)
-        start_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        start_label.setStyleSheet("padding-right: 10px;")
-        self.report_start_date = QDateEdit(QDate.currentDate().addMonths(-1))
-        self.report_start_date.setCalendarPopup(True)
-        self.report_start_date.setFixedHeight(35)
-        start_row.addWidget(start_label)
-        start_row.addWidget(self.report_start_date)
-        filters_group_layout.addLayout(start_row)
-        end_row = QHBoxLayout()
-        end_label = QLabel("по:")
-        end_label.setFixedWidth(80)
-        end_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        end_label.setStyleSheet("padding-right: 10px;")
-        self.report_end_date = QDateEdit(QDate.currentDate())
-        self.report_end_date.setCalendarPopup(True)
-        self.report_end_date.setFixedHeight(35)
-        end_row.addWidget(end_label)
-        end_row.addWidget(self.report_end_date)
-        filters_group_layout.addLayout(end_row)
-        supplier_row = QHBoxLayout()
-        supplier_label = QLabel("Поставщик:")
-        supplier_label.setFixedWidth(80)
-        supplier_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        supplier_label.setStyleSheet("padding-right: 10px;")
-        self.report_supplier_filter = QComboBox()
-        self.report_supplier_filter.setFixedHeight(35)
-        self.report_supplier_filter.setMinimumWidth(300)
-        with Session() as s:
-            suppliers = s.query(Supplier).all()
-            self.report_supplier_filter.addItem("Все", None)
-            for sup in suppliers:
-                self.report_supplier_filter.addItem(sup.name, sup.id)
-        supplier_row.addWidget(supplier_label)
-        supplier_row.addWidget(self.report_supplier_filter)
-        filters_group_layout.addLayout(supplier_row)
-        filters_layout.addWidget(filters_group)
-        buttons_layout = QHBoxLayout()
-        buttons_layout.setSpacing(10)
-        planned_btn = QPushButton("Плановые")
-        planned_btn.setMinimumWidth(120)
-        planned_btn.setFixedHeight(35)
-        planned_btn.clicked.connect(lambda: self.generate_report("planned"))
-        buttons_layout.addWidget(planned_btn)
-        completed_btn = QPushButton("Выполненные")
-        completed_btn.setMinimumWidth(120)
-        completed_btn.setFixedHeight(35)
-        completed_btn.clicked.connect(lambda: self.generate_report("completed"))
-        buttons_layout.addWidget(completed_btn)
-        detailed_btn = QPushButton("Детализация")
-        detailed_btn.setMinimumWidth(120)
-        detailed_btn.setFixedHeight(35)
-        detailed_btn.clicked.connect(lambda: self.generate_report("detailed"))
-        buttons_layout.addWidget(detailed_btn)
-        filters_layout.addLayout(buttons_layout)
-        filters_layout.addSpacerItem(QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding))
-        report_layout.addWidget(filters, 1)
-        self.report_view = QTableView()
-        self.report_widget = QWidget()
-        report_widget_layout = QVBoxLayout(self.report_widget)
-        preview_group = QGroupBox("")
-        preview_group.setObjectName("report_preview")
-        preview_layout = QVBoxLayout(preview_group)
-        preview_layout.addWidget(self.report_view)
-        save_layout = QHBoxLayout()
-        save_layout.addStretch()
-        save_report = QPushButton("Сохранить отчёт")
-        save_report.setMinimumWidth(150)
-        save_report.setFixedHeight(35)
-        save_report.clicked.connect(self.save_report)
-        save_layout.addWidget(save_report)
-        preview_layout.addLayout(save_layout)
-        report_widget_layout.addWidget(preview_group)
-        report_layout.addWidget(self.report_widget, 2)
-        self.tabs.addTab(report_tab, "Отчёты")
+
+        # Проверка роли пользователя
+        with Session() as session:
+            user = session.query(User).options(joinedload(User.role)).filter(User.id == self.current_user.id).first()
+            if user and user.role and user.role.name == "florist":
+                # Для роли "Флорист" показываем только вкладки "Поставки", "Уведомления" и "Отчёты"
+                # Вкладка "Поставки"
+                delivery_tab = QWidget()
+                delivery_layout = QVBoxLayout(delivery_tab)
+                filters_group = QGroupBox("")
+                filters_group.setObjectName("delivery_filters")
+                filters_group.setFixedHeight(200)
+                filters_group.setMinimumWidth(350)
+                filters_layout = QVBoxLayout(filters_group)
+                filters_layout.setSpacing(15)
+                filters_layout.setContentsMargins(20, 25, 20, 20)
+                start_row = QHBoxLayout()
+                start_label = QLabel("Дата с:")
+                start_label.setFixedWidth(80)
+                start_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                self.delivery_start_date = QDateEdit(QDate(2025, 6, 1))
+                self.delivery_start_date.setCalendarPopup(True)
+                self.delivery_start_date.setFixedHeight(35)
+                start_row.addWidget(start_label)
+                start_row.addWidget(self.delivery_start_date)
+                filters_layout.addLayout(start_row)
+                end_row = QHBoxLayout()
+                end_label = QLabel("по:")
+                end_label.setFixedWidth(80)
+                end_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                self.delivery_end_date = QDateEdit(QDate(2025, 6, 30))
+                self.delivery_end_date.setCalendarPopup(True)
+                self.delivery_end_date.setFixedHeight(35)
+                end_row.addWidget(end_label)
+                end_row.addWidget(self.delivery_end_date)
+                filters_layout.addLayout(end_row)
+                supplier_row = QHBoxLayout()
+                supplier_label = QLabel("Поставщик:")
+                supplier_label.setFixedWidth(80)
+                supplier_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                self.delivery_supplier_filter = QComboBox()
+                self.delivery_supplier_filter.setFixedHeight(35)
+                self.delivery_supplier_filter.setMinimumWidth(300)
+                with Session() as s:
+                    suppliers = s.query(Supplier).all()
+                    self.delivery_supplier_filter.addItem("Все", None)
+                    for sup in suppliers:
+                        self.delivery_supplier_filter.addItem(sup.name, sup.id)
+                supplier_row.addWidget(supplier_label)
+                supplier_row.addWidget(self.delivery_supplier_filter)
+                filters_layout.addLayout(supplier_row)
+                delivery_layout.addWidget(filters_group)
+                self.delivery_list = QListWidget()
+                self.delivery_list.currentItemChanged.connect(self.show_delivery)
+                delivery_layout.addWidget(self.delivery_list)
+                add_delivery = QPushButton("Добавить поставку")
+                add_delivery.setObjectName("add_button")
+                add_delivery.clicked.connect(self.add_delivery)
+                add_delivery.setEnabled(self.current_user.can_edit)
+                delivery_layout.addWidget(add_delivery)
+                self.delivery_start_date.dateChanged.connect(self.update_deliveries)
+                self.delivery_end_date.dateChanged.connect(self.update_deliveries)
+                self.delivery_supplier_filter.currentIndexChanged.connect(self.update_deliveries)
+                self.tabs.addTab(delivery_tab, "Поставки")
+                self.delivery_tab = delivery_tab
+
+                # Вкладка "Отчёты"
+                report_tab = QWidget()
+                report_layout = QHBoxLayout(report_tab)
+                filters = QWidget()
+                filters_layout = QVBoxLayout(filters)
+                filters_group = QGroupBox("")
+                filters_group.setObjectName("report_filters")
+                filters_group.setFixedHeight(200)
+                filters_group.setMinimumWidth(350)
+                filters_group_layout = QVBoxLayout(filters_group)
+                filters_group_layout.setSpacing(15)
+                filters_group_layout.setContentsMargins(20, 25, 20, 20)
+                start_row = QHBoxLayout()
+                start_label = QLabel("Дата с:")
+                start_label.setFixedWidth(80)
+                start_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                self.report_start_date = QDateEdit(QDate(2025, 6, 1))
+                self.report_start_date.setCalendarPopup(True)
+                self.report_start_date.setFixedHeight(35)
+                start_row.addWidget(start_label)
+                start_row.addWidget(self.report_start_date)
+                filters_group_layout.addLayout(start_row)
+                end_row = QHBoxLayout()
+                end_label = QLabel("по:")
+                end_label.setFixedWidth(80)
+                end_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                self.report_end_date = QDateEdit(QDate(2025, 6, 30))
+                self.report_end_date.setCalendarPopup(True)
+                self.report_end_date.setFixedHeight(35)
+                end_row.addWidget(end_label)
+                end_row.addWidget(self.report_end_date)
+                filters_group_layout.addLayout(end_row)
+                supplier_row = QHBoxLayout()
+                supplier_label = QLabel("Поставщик:")
+                supplier_label.setFixedWidth(80)
+                supplier_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                self.report_supplier_filter = QComboBox()
+                self.report_supplier_filter.setFixedHeight(35)
+                self.report_supplier_filter.setMinimumWidth(300)
+                with Session() as s:
+                    suppliers = s.query(Supplier).all()
+                    self.report_supplier_filter.addItem("Все", None)
+                    for sup in suppliers:
+                        self.report_supplier_filter.addItem(sup.name, sup.id)
+                supplier_row.addWidget(supplier_label)
+                supplier_row.addWidget(self.report_supplier_filter)
+                filters_group_layout.addLayout(supplier_row)
+                filters_layout.addWidget(filters_group)
+                buttons_layout = QHBoxLayout()
+                buttons_layout.setSpacing(10)
+                planned_btn = QPushButton("Плановые")
+                planned_btn.setMinimumWidth(120)
+                planned_btn.setFixedHeight(35)
+                planned_btn.clicked.connect(lambda: self.generate_report("planned"))
+                buttons_layout.addWidget(planned_btn)
+                completed_btn = QPushButton("Выполненные")
+                completed_btn.setMinimumWidth(120)
+                completed_btn.setFixedHeight(35)
+                completed_btn.clicked.connect(lambda: self.generate_report("completed"))
+                buttons_layout.addWidget(completed_btn)
+                detailed_btn = QPushButton("Детализация")
+                detailed_btn.setMinimumWidth(120)
+                detailed_btn.setFixedHeight(35)
+                detailed_btn.clicked.connect(lambda: self.generate_report("detailed"))
+                buttons_layout.addWidget(detailed_btn)
+                filters_layout.addLayout(buttons_layout)
+                filters_layout.addSpacerItem(QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding))
+                report_layout.addWidget(filters, 1)
+                report_layout.addWidget(self.report_widget, 2)
+                self.tabs.addTab(report_tab, "Отчёты")
+
+
+            else:
+                # Для других ролей (например, Admin) отображаем полный интерфейс
+                ref_tab = QWidget()
+                ref_layout = QVBoxLayout(ref_tab)
+                self.ref_list = QListWidget()
+                self.ref_list.addItems(["Единицы измерения", "Типы товаров", "Условия поставки", "Поставщики", "Товары"])
+                self.ref_list.currentItemChanged.connect(self.show_reference)
+                ref_layout.addWidget(self.ref_list)
+                self.tabs.addTab(ref_tab, "Справочники")
+                delivery_tab = QWidget()
+                delivery_layout = QVBoxLayout(delivery_tab)
+                filters_group = QGroupBox("")
+                filters_group.setObjectName("delivery_filters")
+                filters_group.setFixedHeight(200)
+                filters_group.setMinimumWidth(350)
+                filters_layout = QVBoxLayout(filters_group)
+                filters_layout.setSpacing(15)
+                filters_layout.setContentsMargins(20, 25, 20, 20)
+                start_row = QHBoxLayout()
+                start_label = QLabel("Дата с:")
+                start_label.setFixedWidth(80)
+                start_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                self.delivery_start_date = QDateEdit(QDate(2025, 6, 1))
+                self.delivery_start_date.setCalendarPopup(True)
+                self.delivery_start_date.setFixedHeight(35)
+                start_row.addWidget(start_label)
+                start_row.addWidget(self.delivery_start_date)
+                filters_layout.addLayout(start_row)
+                end_row = QHBoxLayout()
+                end_label = QLabel("по:")
+                end_label.setFixedWidth(80)
+                end_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                self.delivery_end_date = QDateEdit(QDate(2025, 6, 30))
+                self.delivery_end_date.setCalendarPopup(True)
+                self.delivery_end_date.setFixedHeight(35)
+                end_row.addWidget(end_label)
+                end_row.addWidget(self.delivery_end_date)
+                filters_layout.addLayout(end_row)
+                supplier_row = QHBoxLayout()
+                supplier_label = QLabel("Поставщик:")
+                supplier_label.setFixedWidth(80)
+                supplier_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                self.delivery_supplier_filter = QComboBox()
+                self.delivery_supplier_filter.setFixedHeight(35)
+                self.delivery_supplier_filter.setMinimumWidth(300)
+                with Session() as s:
+                    suppliers = s.query(Supplier).all()
+                    self.delivery_supplier_filter.addItem("Все", None)
+                    for sup in suppliers:
+                        self.delivery_supplier_filter.addItem(sup.name, sup.id)
+                supplier_row.addWidget(supplier_label)
+                supplier_row.addWidget(self.delivery_supplier_filter)
+                filters_layout.addLayout(supplier_row)
+                delivery_layout.addWidget(filters_group)
+                self.delivery_list = QListWidget()
+                self.delivery_list.currentItemChanged.connect(self.show_delivery)
+                delivery_layout.addWidget(self.delivery_list)
+                add_delivery = QPushButton("Добавить поставку")
+                add_delivery.setObjectName("add_button")
+                add_delivery.clicked.connect(self.add_delivery)
+                delivery_layout.addWidget(add_delivery)
+                self.delivery_start_date.dateChanged.connect(self.update_deliveries)
+                self.delivery_end_date.dateChanged.connect(self.update_deliveries)
+                self.delivery_supplier_filter.currentIndexChanged.connect(self.update_deliveries)
+                self.tabs.addTab(delivery_tab, "Поставки")
+                self.delivery_tab = delivery_tab
+                report_tab = QWidget()
+                report_layout = QHBoxLayout(report_tab)
+                filters = QWidget()
+                filters_layout = QVBoxLayout(filters)
+                filters_group = QGroupBox("")
+                filters_group.setObjectName("report_filters")
+                filters_group.setFixedHeight(200)
+                filters_group.setMinimumWidth(350)
+                filters_group_layout = QVBoxLayout(filters_group)
+                filters_group_layout.setSpacing(15)
+                filters_group_layout.setContentsMargins(20, 25, 20, 20)
+                start_row = QHBoxLayout()
+                start_label = QLabel("Дата с:")
+                start_label.setFixedWidth(80)
+                start_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                self.report_start_date = QDateEdit(QDate(2025, 6, 1))
+                self.report_start_date.setCalendarPopup(True)
+                self.report_start_date.setFixedHeight(35)
+                start_row.addWidget(start_label)
+                start_row.addWidget(self.report_start_date)
+                filters_group_layout.addLayout(start_row)
+                end_row = QHBoxLayout()
+                end_label = QLabel("по:")
+                end_label.setFixedWidth(80)
+                end_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                self.report_end_date = QDateEdit(QDate(2025, 6, 30))
+                self.report_end_date.setCalendarPopup(True)
+                self.report_end_date.setFixedHeight(35)
+                end_row.addWidget(end_label)
+                end_row.addWidget(self.report_end_date)
+                filters_group_layout.addLayout(end_row)
+                supplier_row = QHBoxLayout()
+                supplier_label = QLabel("Поставщик:")
+                supplier_label.setFixedWidth(80)
+                supplier_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                self.report_supplier_filter = QComboBox()
+                self.report_supplier_filter.setFixedHeight(35)
+                self.report_supplier_filter.setMinimumWidth(300)
+                with Session() as s:
+                    suppliers = s.query(Supplier).all()
+                    self.report_supplier_filter.addItem("Все", None)
+                    for sup in suppliers:
+                        self.report_supplier_filter.addItem(sup.name, sup.id)
+                supplier_row.addWidget(supplier_label)
+                supplier_row.addWidget(self.report_supplier_filter)
+                filters_group_layout.addLayout(supplier_row)
+                filters_layout.addWidget(filters_group)
+                buttons_layout = QHBoxLayout()
+                buttons_layout.setSpacing(10)
+                planned_btn = QPushButton("Плановые")
+                planned_btn.setMinimumWidth(120)
+                planned_btn.setFixedHeight(35)
+                planned_btn.clicked.connect(lambda: self.generate_report("planned"))
+                buttons_layout.addWidget(planned_btn)
+                completed_btn = QPushButton("Выполненные")
+                completed_btn.setMinimumWidth(120)
+                completed_btn.setFixedHeight(35)
+                completed_btn.clicked.connect(lambda: self.generate_report("completed"))
+                buttons_layout.addWidget(completed_btn)
+                detailed_btn = QPushButton("Детализация")
+                detailed_btn.setMinimumWidth(120)
+                detailed_btn.setFixedHeight(35)
+                detailed_btn.clicked.connect(lambda: self.generate_report("detailed"))
+                buttons_layout.addWidget(detailed_btn)
+                filters_layout.addLayout(buttons_layout)
+                filters_layout.addSpacerItem(QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding))
+                report_layout.addWidget(filters, 1)
+                report_layout.addWidget(self.report_widget, 2)
+                self.tabs.addTab(report_tab, "Отчёты")
+                if self.current_user.role.name.lower() == "admin":
+                    settings_tab = QWidget()
+                    settings_layout = QVBoxLayout(settings_tab)
+                    settings_tabs = QTabWidget()
+                    role_tab = QWidget()
+                    role_layout = QVBoxLayout(role_tab)
+                    self.user_combo = QComboBox()
+                    with Session() as s:
+                        users = s.query(User).all()
+                        self.user_combo.addItem("Выберите пользователя", None)
+                        for u in users:
+                            self.user_combo.addItem(u.username, u.id)
+                    self.user_combo.currentIndexChanged.connect(self.load_user_permissions)
+                    self.edit_check = QCheckBox("Редактирование")
+                    self.delete_check = QCheckBox("Удаление")
+                    self.view_check = QCheckBox("Просмотр")
+                    save_permissions = QPushButton("Сохранить права")
+                    save_permissions.clicked.connect(self.save_permissions)
+                    role_layout.addWidget(QLabel("Выберите пользователя:"))
+                    role_layout.addWidget(self.user_combo)
+                    role_layout.addWidget(self.edit_check)
+                    role_layout.addWidget(self.delete_check)
+                    role_layout.addWidget(self.view_check)
+                    role_layout.addWidget(save_permissions)
+                    role_layout.addStretch()
+                    settings_tabs.addTab(role_tab, "Назначение ролей")
+                    stats_tab = QWidget()
+                    stats_layout = QVBoxLayout(stats_tab)
+                    self.stats_label = QLabel()
+                    self.update_statistics()
+                    stats_layout.addWidget(self.stats_label)
+                    stats_layout.addStretch()
+                    settings_tabs.addTab(stats_tab, "Статистика")
+                    account_tab = QWidget()
+                    account_layout = QVBoxLayout(account_tab)
+                    logout_button = QPushButton("Выйти из учётной записи")
+                    logout_button.clicked.connect(self.logout)
+                    change_password_button = QPushButton("Сменить пароль")
+                    change_password_button.clicked.connect(self.change_password)
+                    account_layout.addWidget(logout_button)
+                    account_layout.addWidget(change_password_button)
+                    account_layout.addStretch()
+                    settings_tabs.addTab(account_tab, "Учётная запись")
+                    about_tab = QWidget()
+                    about_layout = QVBoxLayout(about_tab)
+                    about_text = QLabel(
+                        "Название: Deliveries\n"
+                        "Версия: 1.0\n"
+                        "Разработчик: IVAN\n"
+                        "Дата выпуска: 07.06.2025"
+                    )
+                    about_layout.addWidget(about_text)
+                    about_layout.addStretch()
+                    settings_tabs.addTab(about_tab, "О приложении")
+                    settings_layout.addWidget(settings_tabs)
+                    self.tabs.addTab(settings_tab, "Настройки")
+
+        notification_tab = QWidget()
+        notification_layout = QVBoxLayout(notification_tab)
+        self.notification_list = QListWidget()
+        self.notification_list.setObjectName("notificationList")
+        self.notification_list.itemDoubleClicked.connect(self.on_notification_double_click)
+        notification_layout.addWidget(self.notification_list)
+        self.tabs.addTab(notification_tab, "Уведомления")
+        self.notification_tab = notification_tab
+        self.notification_button = QPushButton("Уведомления")
+        self.notification_button.setObjectName("notificationButton")
+        self.notification_button.setFixedHeight(35)
+        self.notification_button.clicked.connect(self.show_notifications)
+        left_layout.addWidget(self.notification_button)
         main_layout.addWidget(left_panel, 1)
         self.right_panel = QStackedWidget()
         main_layout.addWidget(self.right_panel, 3)
         self.right_panel.addWidget(QWidget())
         self.update_deliveries()
+        self.check_active_deliveries()
+
+    def on_notification_double_click(self, item):
+        delivery_id = item.data(Qt.UserRole)
+        self.tabs.setCurrentIndex(self.tabs.indexOf(self.delivery_tab))
+        self.delivery_list.setCurrentRow(-1)
+        for i in range(self.delivery_list.count()):
+            if self.delivery_list.item(i).data(Qt.UserRole) == delivery_id:
+                self.delivery_list.setCurrentRow(i)
+                self.show_delivery()
+                break
+
+    def load_user_permissions(self):
+        user_id = self.user_combo.currentData()
+        if not user_id:
+            self.edit_check.setChecked(False)
+            self.delete_check.setChecked(False)
+            self.view_check.setChecked(False)
+            return
+        with Session() as s:
+            user = s.query(User).get(user_id)
+            self.edit_check.setChecked(bool(user.can_edit))
+            self.delete_check.setChecked(bool(user.can_delete))
+            self.view_check.setChecked(bool(user.can_view))
+
+    def save_permissions(self):
+        user_id = self.user_combo.currentData()
+        if not user_id:
+            QMessageBox.warning(self, "Ошибка", "Выберите пользователя")
+            return
+        with Session() as s:
+            try:
+                user = s.query(User).get(user_id)
+                user.can_edit = 1 if self.edit_check.isChecked() else 0
+                user.can_delete = 1 if self.delete_check.isChecked() else 0
+                user.can_view = 1 if self.view_check.isChecked() else 0
+                s.commit()
+                QMessageBox.information(self, "Успех", "Права сохранены")
+            except Exception as e:
+                s.rollback()
+                logging.error(f"Ошибка сохранения прав: {e}")
+                QMessageBox.critical(self, "Ошибка", f"Не удалось сохранить права: {str(e)}")
+
+    def update_statistics(self):
+        with Session() as s:
+            delivery_count = s.query(Delivery).count()
+            product_count = s.query(Product).count()
+            self.stats_label.setText(f"Всего поставок: {delivery_count}\nВсего товаров: {product_count}")
+
+    def logout(self):
+        self.current_user = None
+        self.close()
+        self.__init__()
+
+    def change_password(self):
+        dialog = ChangePasswordDialog(self.current_user)
+        dialog.exec_()
 
     def on_tab_changed(self, index):
         if self.tabs.tabText(index) == "Отчёты":
             if self.right_panel.count() > 1:
                 self.right_panel.removeWidget(self.right_panel.widget(1))
-            self.right_panel.addWidget(self.report_widget)
-            self.right_panel.setCurrentIndex(1)
+            if self.report_widget:
+                self.right_panel.addWidget(self.report_widget)
+                self.right_panel.setCurrentIndex(1)
+        elif self.tabs.tabText(index) == "Поставки":
+            self.update_deliveries()
         else:
-            self.report_widget.setParent(None)
             if self.right_panel.count() > 1:
                 self.right_panel.setCurrentIndex(1)
             else:
@@ -507,12 +858,18 @@ class MainWindow(QMainWindow):
         delete_btn = QPushButton("Удалить")
         delete_btn.setObjectName("delete_button")
         delete_btn.clicked.connect(self.delete_record)
+        add_btn.setEnabled(self.current_user.can_edit)
+        edit_btn.setEnabled(self.current_user.can_edit)
+        delete_btn.setEnabled(self.current_user.can_delete)
         buttons.addWidget(add_btn)
         buttons.addWidget(edit_btn)
         buttons.addWidget(delete_btn)
         layout.addLayout(buttons)
 
         def update_table():
+            if not self.current_user.can_view:
+                table.setRowCount(0)
+                return
             search_text = search.text().lower()
             with Session() as s:
                 if ref_type == "Единицы измерения":
@@ -592,9 +949,14 @@ class MainWindow(QMainWindow):
         self.right_panel.setCurrentIndex(1)
 
     def update_deliveries(self):
+        if not self.current_user.can_view:
+            self.delivery_list.clear()
+            logging.warning("Нет прав на просмотр, список поставок очищен")
+            return
         start = self.delivery_start_date.date().toPython()
         end = self.delivery_end_date.date().toPython()
         supplier_id = self.delivery_supplier_filter.currentData()
+        logging.info(f"Обновление поставок: дата с {start} по {end}, поставщик {supplier_id}")
         with Session() as s:
             query = s.query(Delivery).options(joinedload(Delivery.supplier)).filter(
                 Delivery.planned_date >= start,
@@ -602,22 +964,27 @@ class MainWindow(QMainWindow):
             )
             if supplier_id:
                 query = query.filter(Delivery.supplier_id == supplier_id)
-            deliveries = query.order_by(Delivery.supplier_id.asc()).all()
+            deliveries = query.all()
+            logging.info(f"Всего записей в запросе: {len(deliveries)}")
+            for d in deliveries:
+                log_date = d.planned_date.strftime("%d.%m.%Y") if d.planned_date else "NULL"
+                logging.info(f"Поставка ID={d.id}, planned_date={log_date}, supplier={d.supplier.name if d.supplier else 'None'}")
             self.delivery_list.clear()
             for d in deliveries:
                 supplier_name = d.supplier.name if d.supplier else "Неизвестно"
                 date_str = (d.actual_date.strftime("%d.%m.%Y") if d.actual_date
-                            else d.planned_date.strftime("%d.%m.%Y") if d.planned_date else "-")
+                        else d.planned_date.strftime("%d.%m.%Y") if d.planned_date else "-")
                 text = f"{supplier_name} - {date_str}"
                 item = QListWidgetItem(text)
                 item.setData(Qt.UserRole, d.id)
                 if not d.actual_date:
                     item.setBackground(QBrush(QColor("#FFCCCC")))
                 self.delivery_list.addItem(item)
+            self.check_active_deliveries()
 
     def show_delivery(self):
         item = self.delivery_list.currentItem()
-        if not item:
+        if not item or not self.current_user.can_view:
             self.right_panel.setCurrentIndex(0)
             return
         delivery_id = item.data(Qt.UserRole)
@@ -644,12 +1011,14 @@ class MainWindow(QMainWindow):
         delete_btn = QPushButton("Удалить")
         delete_btn.setObjectName("delete_button")
         delete_btn.clicked.connect(self.delete_delivery)
+        edit_btn.setEnabled(self.current_user.can_edit)
+        delete_btn.setEnabled(self.current_user.can_delete)
         buttons.addWidget(edit_btn)
         buttons.addWidget(delete_btn)
         layout.addLayout(buttons)
         table = QTableWidget()
-        table.setColumnCount(5)
-        table.setHorizontalHeaderLabels(["Товар", "План. кол-во", "План. цена", "Факт. кол-во", "Факт. цена"])
+        table.setColumnCount(6)
+        table.setHorizontalHeaderLabels(["Товар", "План. кол-во", "План. цена", "Факт. кол-во", "Факт. цена", "Причина отказа"])
         table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         table.setEditTriggers(QTableWidget.NoEditTriggers)
         layout.addWidget(table)
@@ -668,7 +1037,7 @@ class MainWindow(QMainWindow):
                 joinedload(ProductInDelivery.product)
             ).filter_by(delivery_id=delivery_id).all()
             planned_total = sum((p.planned_quantity or 0) * (p.planned_price or 0) for p in products)
-            actual_total = sum((p.actual_quantity or 0) * (p.actual_price or 0) for p in products)
+            actual_total = sum((p.actual_quantity or 0) * (p.actual_price or 0) for p in products) if delivery.actual_date else 0
             planned_cost.setText(f"{planned_total:.2f}")
             actual_cost.setText(f"{actual_total:.2f}")
             table.setRowCount(len(products))
@@ -688,6 +1057,9 @@ class MainWindow(QMainWindow):
                 item = QTableWidgetItem(f"{p.actual_price or 0:.2f}")
                 item.setTextAlignment(Qt.AlignCenter | Qt.AlignVCenter)
                 table.setItem(row, 4, item)
+                item = QTableWidgetItem(p.rejection_reason or "")
+                item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+                table.setItem(row, 5, item)
                 table.setRowHeight(row, 50)
         if self.right_panel.count() > 1:
             self.right_panel.removeWidget(self.right_panel.widget(1))
@@ -695,6 +1067,9 @@ class MainWindow(QMainWindow):
         self.right_panel.setCurrentIndex(1)
 
     def add_record(self):
+        if not self.current_user.can_edit:
+            QMessageBox.warning(self, "Ошибка", "Нет прав на редактирование")
+            return
         item = self.ref_list.currentItem()
         if not item:
             QMessageBox.warning(self, "Ошибка", "Выберите справочник")
@@ -730,6 +1105,9 @@ class MainWindow(QMainWindow):
                     QMessageBox.critical(self, "Ошибка", f"Не удалось добавить: {str(e)}")
 
     def edit_record(self):
+        if not self.current_user.can_edit:
+            QMessageBox.warning(self, "Ошибка", "Нет прав на редактирование")
+            return
         item = self.ref_list.currentItem()
         if not item or self.right_panel.currentIndex() == 0:
             QMessageBox.warning(self, "Ошибка", "Выберите справочник")
@@ -787,6 +1165,9 @@ class MainWindow(QMainWindow):
                 QMessageBox.critical(self, "Ошибка", f"Не удалось редактировать: {str(e)}")
 
     def delete_record(self):
+        if not self.current_user.can_delete:
+            QMessageBox.warning(self, "Ошибка", "Нет прав на удаление")
+            return
         item = self.ref_list.currentItem()
         if not item or self.right_panel.currentIndex() == 0:
             QMessageBox.warning(self, "Ошибка", "Выберите справочник")
@@ -824,6 +1205,9 @@ class MainWindow(QMainWindow):
                 QMessageBox.critical(self, "Ошибка", f"Не удалось удалить: {str(e)}")
 
     def add_delivery(self):
+        if not self.current_user.can_edit:
+            QMessageBox.warning(self, "Ошибка", "Нет прав на редактирование")
+            return
         dialog = AddEditDeliveryDialog()
         if dialog.exec_():
             data = dialog.get_data()
@@ -847,7 +1231,8 @@ class MainWindow(QMainWindow):
                             planned_quantity=p['planned_quantity'],
                             planned_price=p['planned_price'],
                             actual_quantity=p['actual_quantity'],
-                            actual_price=p['actual_price']
+                            actual_price=p['actual_price'],
+                            rejection_reason=p['rejection_reason']
                         ))
                     s.commit()
                     self.update_deliveries()
@@ -858,6 +1243,9 @@ class MainWindow(QMainWindow):
                     QMessageBox.critical(self, "Ошибка", f"Не удалось добавить: {str(e)}")
 
     def edit_delivery(self):
+        if not self.current_user.can_edit:
+            QMessageBox.warning(self, "Ошибка", "Нет прав на редактирование")
+            return
         item = self.delivery_list.currentItem()
         if not item:
             QMessageBox.warning(self, "Ошибка", "Выберите поставку")
@@ -887,7 +1275,8 @@ class MainWindow(QMainWindow):
                             planned_quantity=p['planned_quantity'],
                             planned_price=p['planned_price'],
                             actual_quantity=p['actual_quantity'],
-                            actual_price=p['actual_price']
+                            actual_price=p['actual_price'],
+                            rejection_reason=p['rejection_reason']
                         ))
                     s.commit()
                     self.update_deliveries()
@@ -899,6 +1288,9 @@ class MainWindow(QMainWindow):
                 QMessageBox.critical(self, "Ошибка", f"Не удалось редактировать: {str(e)}")
 
     def delete_delivery(self):
+        if not self.current_user.can_delete:
+            QMessageBox.warning(self, "Ошибка", "Нет прав на удаление")
+            return
         item = self.delivery_list.currentItem()
         if not item:
             QMessageBox.warning(self, "Ошибка", "Выберите поставку")
@@ -924,6 +1316,9 @@ class MainWindow(QMainWindow):
                 QMessageBox.critical(self, "Ошибка", f"Не удалось удалить: {str(e)}")
 
     def generate_report(self, report_type):
+        if not self.current_user.can_view:
+            QMessageBox.warning(self, "Ошибка", "Нет прав на просмотр")
+            return
         logging.info(f"Генерация отчёта: {report_type}")
         with Session() as s:
             try:
@@ -941,11 +1336,14 @@ class MainWindow(QMainWindow):
                     Delivery.planned_date >= start,
                     Delivery.planned_date <= end
                 ).options(joinedload(ProductInDelivery.product)).all()
+                logging.info(f"Найдено поставок: {len(deliveries)}, товаров: {len(products)}")
                 if not deliveries:
                     QMessageBox.warning(self, "Ошибка", "Нет поставок за выбранный период")
+                    self.display_report({"header": [], "table": [["Нет данных"]], "col_widths": [100]})
                     return
                 if not products:
                     QMessageBox.warning(self, "Ошибка", "Нет товаров в поставках за выбранный период")
+                    self.display_report({"header": [], "table": [["Нет данных"]], "col_widths": [100]})
                     return
                 deliveries_data = []
                 for d in deliveries:
@@ -955,7 +1353,8 @@ class MainWindow(QMainWindow):
                             "planned_quantity": p.planned_quantity or 0,
                             "planned_price": p.planned_price or 0.0,
                             "actual_quantity": p.actual_quantity or 0,
-                            "actual_price": p.actual_price or 0.0
+                            "actual_price": p.actual_price or 0.0,
+                            "rejection_reason": p.rejection_reason or ""
                         }
                         for p in products if p.delivery_id == d.id
                     ]
@@ -970,6 +1369,7 @@ class MainWindow(QMainWindow):
                         })
                 if not deliveries_data:
                     QMessageBox.warning(self, "Ошибка", "Нет данных для отчёта после фильтрации")
+                    self.display_report({"header": [], "table": [["Нет данных"]], "col_widths": [100]})
                     return
                 if report_type == "planned":
                     report = self.generate_planned_report(deliveries, products, start, end)
@@ -979,6 +1379,7 @@ class MainWindow(QMainWindow):
                     report = self.generate_detailed_report(deliveries, products, start, end)
                 else:
                     logging.error(f"Неизвестный тип отчёта: {report_type}")
+                    self.display_report({"header": [], "table": [["Ошибка"]], "col_widths": [100]})
                     return
                 report['deliveries_data'] = deliveries_data
                 self.current_report = report
@@ -987,28 +1388,28 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 logging.error(f"Ошибка генерации отчёта: {e}")
                 QMessageBox.critical(self, "Ошибка", f"Не удалось сгенерировать отчёт: {str(e)}")
+                self.display_report({"header": [], "table": [["Ошибка"]], "col_widths": [100]})
 
     def display_report(self, report):
         try:
             model = QStandardItemModel()
             table = report['table']
-            if not table:
-                QMessageBox.warning(self, "Ошибка", "Отчёт не содержит данных")
-                return
-            model.setHorizontalHeaderLabels(table[0])
-            for row in table[1:]:
-                items = []
-                for cell in row:
-                    # Приведение всех значений к строке
-                    if isinstance(cell, (int, float)):
-                        cell_str = f"{cell:.2f}" if isinstance(cell, float) else str(cell)
-                    elif cell is None:
-                        cell_str = ""
-                    else:
-                        cell_str = str(cell)  # Преобразуем любой объект в строку
-                    logging.debug(f"Создание QStandardItem для значения: {cell_str} (тип: {type(cell)})")
-                    items.append(QStandardItem(cell_str))
-                model.appendRow(items)
+            if not table or not any(table):
+                model.setHorizontalHeaderLabels(["Нет данных"])
+                model.appendRow([QStandardItem("Нет данных")])
+            else:
+                model.setHorizontalHeaderLabels(table[0])
+                for row in table[1:]:
+                    items = []
+                    for cell in row:
+                        if isinstance(cell, (int, float)):
+                            cell_str = f"{cell:.2f}" if isinstance(cell, float) else str(cell)
+                        elif cell is None:
+                            cell_str = ""
+                        else:
+                            cell_str = str(cell)
+                        items.append(QStandardItem(cell_str))
+                    model.appendRow(items)
             self.report_view.setModel(model)
             self.report_view.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
             for row in range(model.rowCount()):
@@ -1017,6 +1418,10 @@ class MainWindow(QMainWindow):
         except Exception as e:
             logging.error(f"Ошибка отображения отчёта: {e}")
             QMessageBox.critical(self, "Ошибка", f"Не удалось отобразить отчёт: {str(e)}")
+            model = QStandardItemModel()
+            model.setHorizontalHeaderLabels(["Ошибка"])
+            model.appendRow([QStandardItem("Ошибка отображения")])
+            self.report_view.setModel(model)
 
     def generate_planned_report(self, deliveries, products, start, end):
         header = [
@@ -1030,7 +1435,7 @@ class MainWindow(QMainWindow):
             table.append([
                 d.supplier.name if d.supplier else "",
                 d.planned_date.strftime("%d.%m.%Y") if d.planned_date else "",
-                str(total)  # Используем целое число, так как planned_price - Integer
+                str(total)
             ])
         total_sum = sum((p.planned_quantity or 0) * (p.planned_price or 0) for p in products)
         table.append(["", "ИТОГО", str(total_sum)])
@@ -1045,7 +1450,6 @@ class MainWindow(QMainWindow):
         table = [["Поставщик", "Номер док.", "Факт. дата", "Факт. сумма"]]
         completed = [d for d in deliveries if d.actual_date]
         if not completed:
-            QMessageBox.warning(self, "Нет данных", "Нет выполненных поставок")
             return {"header": header, "table": [], "col_widths": []}
         for d in completed:
             delivery_products = [p for p in products if p.delivery_id == d.id]
@@ -1056,7 +1460,7 @@ class MainWindow(QMainWindow):
                 d.supplier.name if d.supplier else "",
                 d.doc_number or "",
                 d.actual_date.strftime("%d.%m.%Y") if d.actual_date else "",
-                str(total)  # Используем целое число
+                str(total)
             ])
         total_sum = sum((p.actual_quantity or 0) * (p.actual_price or 0) for p in products if any(d.id == p.delivery_id for d in completed))
         table.append(["", "Итого", "", str(total_sum)])
@@ -1068,7 +1472,7 @@ class MainWindow(QMainWindow):
             f"Период: {start.strftime('%d.%m.%Y')} - {end.strftime('%d.%m.%Y')}",
             f"Поставщик: {self.report_supplier_filter.currentText()}"
         ]
-        table = [["Поставщик", "Номер док.", "План. дата", "Факт. дата", "Товар", "План. кол/цена", "Факт. кол/цена"]]
+        table = [["Поставщик", "Номер док.", "План. дата", "Факт. дата", "Товар", "План. кол/цена", "Факт. кол/цена", "Причина отказа"]]
         for d in deliveries:
             for p in products:
                 if p.delivery_id == d.id:
@@ -1078,13 +1482,14 @@ class MainWindow(QMainWindow):
                         d.planned_date.strftime("%d.%m.%Y") if d.planned_date else "",
                         d.actual_date.strftime("%d.%m.%Y") if d.actual_date else "",
                         p.product.name if p.product else "",
-                        f"{p.planned_quantity or 0}/{p.planned_price or 0}",  # Без .2f
-                        f"{p.actual_quantity or 0}/{p.actual_price or 0}"     # Без .2f
+                        f"{p.planned_quantity or 0}/{p.planned_price or 0}",
+                        f"{p.actual_quantity or 0}/{p.actual_price or 0}",
+                        p.rejection_reason or ""
                     ])
-        return {"header": header, "table": table, "col_widths": [50, 60, 35, 35, 50, 40, 40]}
+        return {"header": header, "table": table, "col_widths": [50, 60, 35, 35, 50, 40, 40, 50]}
 
     def save_report(self):
-        if not self.current_report:
+        if not hasattr(self, 'current_report') or not self.current_report['header']:
             QMessageBox.warning(self, "Ошибка", "Сначала сформируйте отчёт")
             return
         file_name, _ = QFileDialog.getSaveFileName(self, "Сохранить отчёт", "", "PDF (*.pdf)")
@@ -1093,7 +1498,16 @@ class MainWindow(QMainWindow):
         if not file_name.endswith('.pdf'):
             file_name += '.pdf'
         try:
-            doc = SimpleDocTemplate(file_name, pagesize=landscape(A4), rightMargin=10*mm, leftMargin=10*mm, topMargin=10*mm, bottomMargin=10*mm)
+            # Определяем альбомную ориентацию для детализированного отчёта
+            is_detailed = self.current_report['header'][0] == "Детализация"
+            doc = SimpleDocTemplate(
+                file_name,
+                pagesize=landscape(A4) if is_detailed else A4,
+                rightMargin=10*mm,
+                leftMargin=10*mm,
+                topMargin=10*mm,
+                bottomMargin=10*mm
+            )
             elements = []
             styles = getSampleStyleSheet()
             try:
@@ -1103,16 +1517,40 @@ class MainWindow(QMainWindow):
                 font = 'Helvetica'
                 logging.warning(f"Шрифт DejaVuSans не найден, используется Helvetica: {e}")
             styles.add(ParagraphStyle(name='Header', fontName=font, fontSize=14, alignment=1, spaceAfter=6))
-            styles.add(ParagraphStyle(name='Table', fontName=font, fontSize=10, leading=12))
+            styles.add(ParagraphStyle(name='Table', fontName=font, fontSize=10, leading=12, wordWrap='CJK'))
             for line in self.current_report['header']:
                 elements.append(Paragraph(line, styles['Header']))
             elements.append(Spacer(1, 10*mm))
-            table_data = [[Paragraph(str(cell) if cell is not None else '', styles['Table']) for cell in row] for row in self.current_report['table']]
-            col_widths = self.current_report.get('col_widths', [40] * len(table_data[0]))
-            if len(col_widths) != len(table_data[0]):
-                col_widths = [40] * len(table_data[0])  # Корректировка размеров
-            col_widths = [w * mm for w in col_widths]
-            table = Table(table_data, colWidths=col_widths, rowHeights=[6*mm] * len(table_data))
+            
+            # Преобразование данных таблицы в Paragraph для каждой ячейки
+            table_data = self.current_report['table']
+            pdf_table_data = []
+            for row in table_data:
+                pdf_row = []
+                for cell in row:
+                    if cell is None:
+                        cell_text = ""
+                    elif isinstance(cell, (int, float)):
+                        cell_text = f"{cell:.2f}" if isinstance(cell, float) else str(cell)
+                    else:
+                        cell_text = str(cell)
+                    pdf_row.append(Paragraph(cell_text, styles['Table']))
+                pdf_table_data.append(pdf_row)
+            
+            # Динамическая настройка ширины столбцов
+            page_width = (landscape(A4)[0] if is_detailed else A4[0]) - 20*mm  # Учитываем поля
+            col_count = len(table_data[0])
+            col_widths = self.current_report.get('col_widths', [page_width / col_count] * col_count)
+            if len(col_widths) != col_count:
+                col_widths = [page_width / col_count] * col_count
+            col_widths = [min(w * mm, page_width / col_count) for w in col_widths]
+            total_width = sum(col_widths)
+            if total_width > page_width:
+                scale_factor = page_width / total_width
+                col_widths = [w * scale_factor for w in col_widths]
+            
+            # Создание таблицы с поддержкой разбиения
+            table = Table(pdf_table_data, colWidths=col_widths, splitByRow=True, splitInRow=False)
             table.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
                 ('GRID', (0, 0), (-1, -1), 1, colors.black),
@@ -1120,15 +1558,19 @@ class MainWindow(QMainWindow):
                 ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
                 ('FONTNAME', (0, 0), (-1, -1), font),
                 ('FONTSIZE', (0, 0), (-1, -1), 10),
-                ('LEADING', (0, 0), (-1, -1), 12)
+                ('LEADING', (0, 0), (-1, -1), 12),
+                ('WORDWRAP', (0, 0), (-1, -1), 'CJK'),  # Поддержка переноса текста
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+                ('TOPPADDING', (0, 0), (-1, -1), 4)
             ]))
             elements.append(table)
+            
             elements.append(Spacer(1, 10*mm))
             elements.append(Paragraph("Список поставок", styles['Table']))
             for d in self.current_report.get('deliveries_data', []):
                 text = f"Поставщик: {d.get('supplier_name', '')}, Номер: {d.get('doc_number', '')}, " \
-                    f"План: {d.get('planned_date').strftime('%d.%m.%Y') if d.get('planned_date') else ''}, " \
-                    f"Факт: {d.get('actual_date').strftime('%d.%m.%Y') if d.get('actual_date') else ''}"
+                       f"План: {d.get('planned_date').strftime('%d.%m.%Y') if d.get('planned_date') else ''}, " \
+                       f"Факт: {d.get('actual_date').strftime('%d.%m.%Y') if d.get('actual_date') else ''}"
                 elements.append(Paragraph(text, styles['Table']))
                 for p in d.get('products', []):
                     name = p.get('name', '') or '-'
@@ -1136,8 +1578,10 @@ class MainWindow(QMainWindow):
                     planned_price = p.get('planned_price', 0)
                     actual_qty = p.get('actual_quantity', 0)
                     actual_price = p.get('actual_price', 0)
-                    text = f" - {name}: План: {planned_qty}/{planned_price}, Факт: {actual_qty}/{actual_price}"
+                    rejection_reason = p.get('rejection_reason', '') or '-'
+                    text = f" - {name}: План: {planned_qty}/{planned_price}, Факт: {actual_qty}/{actual_price}, Причина отказа: {rejection_reason}"
                     elements.append(Paragraph(text, styles['Table']))
+            
             doc.build(elements)
             QMessageBox.information(self, "Успех", "Отчёт успешно сохранён")
             logging.info(f"Отчёт сохранён: {file_name}")
