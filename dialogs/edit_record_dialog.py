@@ -7,7 +7,7 @@ class EditRecordDialog(QDialog):
     def __init__(self, parent=None, table_name=None, record=None, session=None):
         super().__init__(parent)
         self.setWindowTitle(f"Редактировать запись: {table_name}")
-        self.setFixedSize(400, 300)
+
         self.table_name = table_name
         self.record = record
         self.session = session

@@ -911,13 +911,62 @@ class MainWindow(QMainWindow):
         model = QStandardItemModel()
         table_data = report_data['table']
         headers = table_data[0]
-        model.setHorizontalHeaderLabels(headers)
+        
+        # Разбиваем длинные заголовки на несколько строк
+        wrapped_headers = []
+        for header in headers:
+            # Если заголовок длиннее 20 символов, разбиваем его
+            if len(header) > 20:
+                words = header.split()
+                wrapped = ""
+                line_length = 0
+                for word in words:
+                    if line_length + len(word) > 20:
+                        wrapped += "\n"
+                        line_length = 0
+                    wrapped += word + " "
+                    line_length += len(word) + 1
+                wrapped_headers.append(wrapped.strip())
+            else:
+                wrapped_headers.append(header)
+        
+        model.setHorizontalHeaderLabels(wrapped_headers)
+        
+        # Заполнение модели данными
         for row in table_data[1:]:
             items = [QStandardItem(str(cell) if isinstance(cell, (int, float)) else cell or '-') for cell in row]
             model.appendRow(items)
+        
         self.report_preview.setModel(model)
-        self.report_preview.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.report_preview.resizeRowsToContents()
+        
+        # Настройка горизонтального заголовка
+        header = self.report_preview.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.Stretch)  # Растягиваем столбцы по ширине
+        header.setDefaultAlignment(Qt.AlignCenter | Qt.AlignVCenter)  # Центрируем текст
+        
+        # Устанавливаем минимальную и начальную ширину столбцов
+        for i in range(len(wrapped_headers)):
+            header.setMinimumSectionSize(80)  # Минимальная ширина столбца
+            header.resizeSection(i, 120)  # Начальная ширина столбца (настройте по необходимости)
+        
+        # Увеличиваем высоту заголовков для отображения многострочного текста
+        header.setDefaultSectionSize(80)  # Увеличиваем высоту заголовков
+        
+        # Настройка таблицы
+        self.report_preview.setWordWrap(True)  # Включаем перенос текста в ячейках
+        self.report_preview.resizeRowsToContents()  # Подгоняем высоту строк под содержимое
+        self.report_preview.verticalHeader().setDefaultSectionSize(40)  # Устанавливаем высоту строк данных
+        
+        # Применяем CSS для поддержки переноса текста в заголовках
+        self.report_preview.setStyleSheet("""
+            QHeaderView::section {
+                white-space: normal; /* Разрешаем перенос текста */
+                padding: 5px; /* Отступы для читаемости */
+            }
+            QTableView {
+                white-space: normal; /* Перенос текста в ячейках */
+            }
+        """)
 
     def generate_weekly_by_weeks_report(self, events, attendances, start_date, end_date, institution_name, direction_name, audience_name, format_name):
         header = [

@@ -24,7 +24,7 @@ class AddRecordDialog(QDialog):
     def __init__(self, parent=None, table_name=None, session=None):
         super().__init__(parent)
         self.setWindowTitle(f"Добавить запись: {table_name}")
-        self.setFixedSize(400, 300)
+
         self.table_name = table_name
         self.session = session
         self.setup_ui()
