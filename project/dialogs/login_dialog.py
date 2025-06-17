@@ -12,38 +12,20 @@ class LoginDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Вход в систему")
-        self.user_id = None  # Добавляем атрибут user_id, изначально None
+        self.user_id = None 
         self.setup_ui()
         self.setStyleSheet(STYLESHEET)
-        self.setMinimumSize(300, 300)  # Увеличиваем размер окна
+        self.setMinimumSize(300, 300)
         self.setWindowIcon(QIcon("./svg/logo.svg"))
 
     def setup_ui(self):
         main_layout = QVBoxLayout(self)
 
-        # Логотип
-        try:
-            response = requests.get("https://цбс.абакан.рф/static/images/logo.png")
-            pixmap = QPixmap()
-            pixmap.loadFromData(BytesIO(response.content).read())
-            logo_label = QLabel()
-            pixmap = pixmap.scaled(150, 150, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            logo_label.setPixmap(pixmap)
-            logo_label.setAlignment(Qt.AlignCenter)
-            main_layout.addWidget(logo_label)
-        except:
-            logo_label = QLabel("ЦБС Абакана")
-            logo_label.setAlignment(Qt.AlignCenter)
-            logo_label.setStyleSheet("font-size: 24px; font-weight: bold; color: #333;")
-            main_layout.addWidget(logo_label)
-
-        # Заголовок
         title_label = QLabel("Вход в систему")
         title_label.setAlignment(Qt.AlignCenter)
         title_label.setStyleSheet("font-size: 20px; font-weight: bold; margin: 20px 0;")
         main_layout.addWidget(title_label)
 
-        # Поля ввода
         form_layout = QVBoxLayout()
 
         self.username_input = QLineEdit()
@@ -59,7 +41,6 @@ class LoginDialog(QDialog):
 
         main_layout.addLayout(form_layout)
 
-        # Кнопка входа
         self.login_button = QPushButton("Войти")
         self.login_button.setStyleSheet("""
             QPushButton {
@@ -95,8 +76,8 @@ class LoginDialog(QDialog):
                 ).first()
 
                 if user:
-                    self.user_id = user.id  # Сохраняем user_id в атрибут класса
-                    self.accept()  # Завершаем диалог
+                    self.user_id = user.id 
+                    self.accept() 
                 else:
                     QMessageBox.critical(self, "Ошибка", "Неверное имя пользователя или пароль")
             except Exception as e:

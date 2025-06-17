@@ -19,10 +19,10 @@ STYLESHEET = """
         border: 1px solid #6B7280; 
         box-shadow: 0 0 5px rgba(107, 114, 128, 0.2); 
     }
-    /* Специфические стили для поля поиска */
+    /* Cтили для поля поиска */
     QLineEdit#search_input { 
         min-width: 250px; 
-        padding-left: 35px; /* Отступ для иконки поиска */
+        padding-left: 35px;
         background: #FFFFFF url(:/svg/search.svg) no-repeat 10px center; 
         background-size: 20px; 
     }
@@ -118,7 +118,7 @@ STYLESHEET = """
         background-color: #FFFFFF; 
     }
     QTabBar { 
-        align: center; /* Центрирование всей панели вкладок */
+        align: center;
     }
     QTabBar::tab { 
         background-color: #E2E8F0; 
@@ -129,7 +129,7 @@ STYLESHEET = """
         border-top-left-radius: 6px; 
         border-top-right-radius: 6px; 
         margin-right: 2px; 
-        text-align: center; /* Центрирование текста внутри вкладки */
+        text-align: center;
     }
     QTabBar::tab:selected { 
         background-color: #FFFFFF; 
@@ -243,13 +243,13 @@ STYLESHEET = """
         background-color: #FFFFFF; 
         color: #2D3748; 
         border: 1px solid #CBD5E0; 
-        padding: 8px 30px 8px 10px; /* Отступ справа для стрелки */
+        padding: 8px 30px 8px 10px;
         font-size: 14px; 
         font-family: 'Inter', 'Roboto', sans-serif; 
         border-radius: 6px; 
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05); 
-        min-width: 150px; /* Фиксированная минимальная ширина для отчетов */
-        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #FFFFFF, stop:0.95 #F7F9FC); /* Лёгкий градиент для визуального эффекта */
+        min-width: 150px;
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #FFFFFF, stop:0.95 #F7F9FC);
     }
     QComboBox:hover { 
         border: 1px solid #6B7280; 
@@ -271,7 +271,6 @@ STYLESHEET = """
         background: transparent; 
     }
     QComboBox::down-arrow { 
-        image: none; /* Убрали кастомную стрелку */
         width: 12px; 
         height: 12px; 
     }

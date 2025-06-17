@@ -3,7 +3,6 @@ from db import Session
 
 @contextmanager
 def get_session():
-    """Контекстный менеджер для получения сессии базы данных."""
     session = Session()
     try:
         yield session

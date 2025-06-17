@@ -3,10 +3,9 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
 from sqlalchemy.sql import func
 
-# Настройка базы данных (предполагается PostgreSQL)
-engine = create_engine('postgresql://postgres:1234@localhost:5432/diplom')
+# Настройка базы данных
+engine = create_engine('postgresql://acbs:1234@95.174.93.180:5432/acbs_db')
 Base = declarative_base()
-# Функция для получения сессии базы данных
 Session = sessionmaker(bind=engine)
 
 # Модель для таблицы Расшифровка
@@ -16,7 +15,6 @@ class Decoding(Base):
     full_name = Column(String)
     short_name = Column(String)
 
-    # Связь с Учреждение (один ко многим)
     institutions = relationship("Institution", back_populates="decoding")
 
 # Модель для таблицы Учреждение
@@ -27,7 +25,6 @@ class Institution(Base):
     name = Column(String)
     user_id = Column(Integer, ForeignKey('user.id'))
 
-    # Связи
     decoding = relationship("Decoding", back_populates="institutions")
     user = relationship("User", back_populates="institutions")
     events = relationship("Event", back_populates="organizer")
@@ -41,7 +38,6 @@ class User(Base):
     password = Column(String)
     role_id = Column(Integer, ForeignKey('role.id'))
 
-    # Связи
     role = relationship("Role", back_populates="users")
     institutions = relationship("Institution", back_populates="user")
 
@@ -51,7 +47,6 @@ class Role(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String)
 
-    # Связь с Пользователь (один ко многим)
     users = relationship("User", back_populates="role")
 
 # Модель для таблицы ФорматыМероприятий
@@ -60,7 +55,6 @@ class EventFormat(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String)
 
-    # Связь с Мероприятия (один ко многим)
     events = relationship("Event", back_populates="format")
 
 # Модель для таблицы КлассификацииМероприятий
@@ -69,7 +63,6 @@ class EventClassification(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String)
 
-    # Связь с Мероприятия (один ко многим)
     events = relationship("Event", back_populates="classification")
 
 # Модель для таблицы НаправленияДеятельности
@@ -78,7 +71,6 @@ class ActivityDirection(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String)
 
-    # Связь с Мероприятия (один ко многим)
     events = relationship("Event", back_populates="direction")
 
 # Модель для таблицы ФормаМероприятия
@@ -87,7 +79,6 @@ class EventType(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String)
 
-    # Связь с Мероприятия (один ко многим)
     events = relationship("Event", back_populates="event_type")
 
 # Модель для таблицы ЦелеваяАудитория
@@ -96,7 +87,6 @@ class TargetAudience(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String)
 
-    # Связь с Мероприятия (один ко многим)
     events = relationship("Event", back_populates="target_audience")
 
 # Модель для таблицы МестоПроведения
@@ -105,7 +95,6 @@ class Venue(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String)
 
-    # Связь с Мероприятия (один ко многим)
     events = relationship("Event", back_populates="venue")
 
 # Модель для таблицы Мероприятия
@@ -123,7 +112,6 @@ class Event(Base):
     classification_id = Column(Integer, ForeignKey('event_classification.id'))
     direction_id = Column(Integer, ForeignKey('activity_direction.id'))
 
-    # Связи
     venue = relationship("Venue", back_populates="events")
     organizer = relationship("Institution", back_populates="events")
     event_type = relationship("EventType", back_populates="events")
@@ -139,15 +127,14 @@ class Attendance(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     institution_id = Column(Integer, ForeignKey('institution.id'))
     event_id = Column(Integer, ForeignKey('event.id'))
-    total_attendees = Column(Integer)  # Охват (Количество посетителей)
-    child_attendees = Column(Integer)  # ДетейПосетителей
-    volunteers = Column(Integer)  # КоличествоВолонтёров
-    at_risk_teens = Column(Integer)  # ПодросткиГруппыРиска
+    total_attendees = Column(Integer)
+    child_attendees = Column(Integer)
+    volunteers = Column(Integer)
+    at_risk_teens = Column(Integer)
 
-    # Связи
     institution = relationship("Institution", back_populates="attendances")
     event = relationship("Event", back_populates="attendances")
 
-# Создание таблиц в базе данных
+# Создание всех таблиц в базе данных
 Base.metadata.create_all(engine)
 

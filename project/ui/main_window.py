@@ -27,37 +27,22 @@ class MainWindow(QMainWindow):
         with get_session() as session:
             self.user = session.query(User).filter(User.id == user_id).first()
         self.setWindowTitle("ЦБС Абакана")
-        self.setup_icon()
         self.setup_ui()
         self.setStyleSheet(STYLESHEET)
         QTimer.singleShot(100, self.show_events)
         self.showMaximized()
         self.setWindowIcon(QIcon("./svg/logo.svg"))
 
-    def setup_icon(self):
-        try:
-            response = requests.get("https://цбс.абакан.рф/static/images/logo.png")
-            icon = QIcon()
-            icon_pixmap = QPixmap()
-            icon_pixmap.loadFromData(BytesIO(response.content).read())
-            icon.addPixmap(icon_pixmap)
-            self.setWindowIcon(icon)
-        except:
-            pass
-
     def setup_ui(self):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
-
         self.tabs = QTabWidget()
         main_layout.addWidget(self.tabs)
-
         self.setup_table_tab()
         self.setup_calendar_tab()
         self.setup_admin_tab()
         self.setup_report_tab()
-
         main_layout.addWidget(self.tabs)
 
     def setup_table_tab(self):
@@ -136,7 +121,7 @@ class MainWindow(QMainWindow):
             event_types = session.query(EventType).all()
             self.event_type_filter_table.addItem("Все формы")
             self.event_type_filter_table.addItems([et.name for et in event_types])
-        filters_layout.addWidget(QLabel("Форма мероприятия:"))
+        filters_layout.addWidget(QLabel("Форма:"))
         filters_layout.addWidget(self.event_type_filter_table)
 
         table_layout.addWidget(filters_group)
@@ -184,14 +169,11 @@ class MainWindow(QMainWindow):
             if user and user.role and user.role.name == "admin":
                 admin_tab = QWidget()
                 admin_layout = QVBoxLayout(admin_tab)
-
                 admin_title = QLabel("Админ-панель")
                 admin_title.setAlignment(Qt.AlignCenter)
                 admin_layout.addWidget(admin_title)
-
                 manage_group = QGroupBox("Управление справочниками")
                 manage_layout = QVBoxLayout(manage_group)
-
                 self.table_selector = QComboBox()
                 self.table_selector.addItems([
                     "Расшифровка", "Учреждение", "Пользователь", "Роль",
@@ -199,7 +181,6 @@ class MainWindow(QMainWindow):
                     "Типы мероприятий", "Аудитории", "Места проведения"
                 ])
                 self.table_selector.currentIndexChanged.connect(self.refresh_table)
-
                 selector_layout = QHBoxLayout()
                 selector_layout.addWidget(QLabel("Выберите справочник:"))
                 selector_layout.addWidget(self.table_selector)
@@ -211,20 +192,16 @@ class MainWindow(QMainWindow):
                 self.delete_record_button.clicked.connect(self.delete_record)
                 selector_layout.addWidget(self.add_record_button)
                 selector_layout.addWidget(self.delete_record_button)
-
                 self.admin_table = QTableWidget()
                 self.admin_table.setSelectionBehavior(QTableWidget.SelectRows)
                 self.admin_table.setSelectionMode(QTableWidget.SingleSelection)
                 self.admin_table.setShowGrid(True)
                 self.admin_table.setEditTriggers(QTableWidget.NoEditTriggers)
                 self.admin_table.doubleClicked.connect(self.edit_record)
-
                 manage_layout.addLayout(selector_layout)
                 manage_layout.addWidget(self.admin_table)
-
                 admin_layout.addWidget(manage_group)
                 admin_layout.addStretch()
-
                 self.tabs.addTab(admin_tab, "Админ-панель")
                 self.refresh_table()
 
@@ -860,7 +837,6 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Ошибка", f"Не удалось загрузить шрифт DejaVuSans.ttf: {str(e)}\nСкачайте шрифт DejaVuSans.ttf и поместите его в директорию проекта.")
             return
 
-        # Настройка документа
         doc = SimpleDocTemplate(
             file_name,
             pagesize=landscape(A4),
@@ -876,12 +852,10 @@ class MainWindow(QMainWindow):
         styles.add(ParagraphStyle(name='SectionHeader', fontName='DejaVuSans', fontSize=10, leading=12, alignment=0))
         styles.add(ParagraphStyle(name='EventText', fontName='DejaVuSans', fontSize=8, leading=10, alignment=0, spaceAfter=6))
 
-        # Добавление заголовков отчёта
         for line in report_data['header']:
             elements.append(Paragraph(line, styles['HeaderStyle']))
         elements.append(Spacer(1, 8*mm))
 
-        # Подготовка таблицы
         table_data = report_data['table']
         if table_data:
             pdf_table_data = []
@@ -895,21 +869,18 @@ class MainWindow(QMainWindow):
                     pdf_row.append(Paragraph(str(cell), styles['TableStyle']))
                 pdf_table_data.append(pdf_row)
 
-            # Динамическая настройка ширины столбцов
-            page_width = landscape(A4)[0] - 20*mm  # Учитываем поля (10 мм слева + 10 мм справа)
+            page_width = landscape(A4)[0] - 20*mm 
             col_count = len(table_data[0])
             col_widths = report_data.get('col_widths', None)
             if col_widths:
                 col_widths = [min(w, page_width / col_count) * mm for w in col_widths]
-                # Масштабируем ширину столбцов, если сумма превышает ширину страницы
                 total_width = sum(col_widths)
                 if total_width > page_width:
                     scale_factor = page_width / total_width
                     col_widths = [w * scale_factor for w in col_widths]
             else:
-                col_widths = [page_width / col_count] * col_count  # Равномерное распределение ширины
+                col_widths = [page_width / col_count] * col_count
 
-            # Создание таблицы с поддержкой разбиения
             table = Table(pdf_table_data, colWidths=col_widths, splitByRow=True, splitInRow=False)
             table.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (-1, 0), colors.Color(0.95, 0.95, 0.95)),
@@ -933,7 +904,6 @@ class MainWindow(QMainWindow):
 
         elements.append(Spacer(1, 15*mm))
 
-        # Добавление списка мероприятий
         elements.append(Paragraph("Список мероприятий", styles['SectionHeader']))
         elements.append(Spacer(1, 5*mm))
 
@@ -947,15 +917,13 @@ class MainWindow(QMainWindow):
         else:
             elements.append(Paragraph("Мероприятий за выбранный период не найдено.", styles['TableStyle']))
 
-        # Построение документа
         doc.build(elements)
 
     def display_report(self, report_data):
         model = QStandardItemModel()
         table_data = report_data['table']
         headers = table_data[0]
-        
-        # Сохраняем оригинальные заголовки без переносов
+
         wrapped_headers = [str(header) for header in headers]
         
         model.setHorizontalHeaderLabels(wrapped_headers)
@@ -967,21 +935,19 @@ class MainWindow(QMainWindow):
         self.report_preview.setModel(model)
         
         header = self.report_preview.horizontalHeader()
-        header.setSectionResizeMode(QHeaderView.Interactive)  # Позволяет пользователю изменять ширину столбцов
+        header.setSectionResizeMode(QHeaderView.Interactive)
         header.setDefaultAlignment(Qt.AlignCenter | Qt.AlignVCenter)
-        
-        # Настраиваем минимальную ширину столбцов
+
         for i in range(len(wrapped_headers)):
             header.setMinimumSectionSize(100)
-            header.resizeSection(i, 150)  # Начальная ширина столбцов увеличена
+            header.resizeSection(i, 150)
         
         header.setDefaultSectionSize(100)
         
         self.report_preview.setWordWrap(True)
         self.report_preview.resizeRowsToContents()
-        self.report_preview.verticalHeader().setDefaultSectionSize(50)  # Увеличена высота строк
-        
-        # Автоматическая подстройка ширины столбцов под содержимое
+        self.report_preview.verticalHeader().setDefaultSectionSize(50)
+
         self.report_preview.resizeColumnsToContents()
 
     def generate_weekly_by_cultural_events_report(self, events, attendances, start_date, end_date, institution_name, direction_name, audience_name, format_name, event_type_name):
@@ -1552,53 +1518,47 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 QMessageBox.critical(self, "Ошибка", f"Не удалось открыть диалог добавления: {str(e)}")
 
+
     def edit_record(self):
-            selected_rows = self.admin_table.selectionModel().selectedRows()
-            if not selected_rows:
-                QMessageBox.warning(self, "Предупреждение", "Выберите запись для редактирования")
-                return
+        selected_rows = self.admin_table.selectionModel().selectedRows()
+        if not selected_rows:
+            QMessageBox.warning(self, "Предупреждение", "Выберите запись для редактирования")
+            return
 
-            row = selected_rows[0].row()
-            table_name = self.table_selector.currentText()
-            with get_session() as session:
-                try:
-                    record_id = self.admin_table.item(row, 0).data(Qt.UserRole)
-                    if table_name == "Расшифровка":
-                        record = session.query(Decoding).filter(Decoding.id == record_id).first()
-                    elif table_name == "Учреждение":
-                        record = session.query(Institution).filter(Institution.id == record_id).first()
-                    elif table_name == "Пользователь":
-                        record = session.query(User).filter(User.id == record_id).first()
-                    elif table_name == "Роль":
-                        record = session.query(Role).filter(Role.id == record_id).first()
-                    elif table_name == "Форматы":
-                        record = session.query(EventFormat).filter(EventFormat.id == record_id).first()
-                    elif table_name == "Классификации":
-                        record = session.query(EventClassification).filter(EventClassification.id == record_id).first()
-                    elif table_name == "Направления":
-                        record = session.query(ActivityDirection).filter(ActivityDirection.id == record_id).first()
-                    elif table_name == "Типы мероприятий":
-                        record = session.query(EventType).filter(EventType.id == record_id).first()
-                    elif table_name == "Аудитории":
-                        record = session.query(TargetAudience).filter(TargetAudience.id == record_id).first()
-                    elif table_name == "Места проведения":
-                        record = session.query(Venue).filter(Venue.id == record_id).first()
-                    else:
-                        QMessageBox.critical(self, "Ошибка", "Неизвестная таблица")
-                        return
+        row = selected_rows[0].row()
+        table_name = self.table_selector.currentText()
+        with get_session() as session:
+            try:
+                record_id = self.admin_table.item(row, 0).data(Qt.UserRole)
+                model_class = {
+                    "Расшифровка": Decoding,
+                    "Учреждение": Institution,
+                    "Пользователь": User,
+                    "Роль": Role,
+                    "Форматы": EventFormat,
+                    "Классификации": EventClassification,
+                    "Направления": ActivityDirection,
+                    "Типы мероприятий": EventType,
+                    "Аудитории": TargetAudience,
+                    "Места проведения": Venue
+                }.get(table_name)
+                if not model_class:
+                    QMessageBox.critical(self, "Ошибка", "Неизвестная таблица")
+                    return
 
-                    if not record:
-                        QMessageBox.warning(self, "Ошибка", "Запись не найдена")
-                        return
+                record = session.query(model_class).filter(model_class.id == record_id).first()
+                if not record:
+                    QMessageBox.warning(self, "Ошибка", "Запись не найдена")
+                    return
 
-                    dialog = AddRecordDialog(self, table_name, session, record)
-                    if dialog.exec():
-                        session.commit()
-                        self.refresh_table()
-                        self.refresh_combos()
-                except Exception as e:
-                    session.rollback()
-                    QMessageBox.critical(self, "Ошибка", f"Не удалось отредактировать запись: {str(e)}")
+                dialog = AddRecordDialog(self, table_name, session, record)
+                if dialog.exec():
+                    session.commit()
+                    self.refresh_table()
+                    self.refresh_combos()
+            except Exception as e:
+                session.rollback()
+                QMessageBox.critical(self, "Ошибка", f"Не удалось отредактировать запись: {str(e)}")
 
     def refresh_table(self):
         table_name = self.table_selector.currentText()
@@ -1606,48 +1566,48 @@ class MainWindow(QMainWindow):
             try:
                 if table_name == "Расшифровка":
                     records = session.query(Decoding).all()
-                    headers = ["Название", "Описание"]
-                    self.populate_admin_table(records, headers, ["name", "description"], [150, 300])
+                    headers = ["Полное название", "Краткое название"]
+                    self.populate_admin_table(records, headers, ["full_name", "short_name"])
                 elif table_name == "Учреждение":
-                    records = session.query(Institution).all()
-                    headers = ["Название", "Адрес"]
-                    self.populate_admin_table(records, headers, ["name", "address"], [150, 300])
+                    records = session.query(Institution).options(joinedload(Institution.decoding), joinedload(Institution.user)).all()
+                    headers = ["Название", "Расшифровка", "Пользователь"]
+                    self.populate_admin_table(records, headers, ["name", "decoding.full_name", "user.username"])
                 elif table_name == "Пользователь":
                     records = session.query(User).options(joinedload(User.role)).all()
-                    headers = ["Логин", "Роль"]
-                    self.populate_admin_table(records, headers, ["login", "role.name"], [150, 150])
+                    headers = ["Имя пользователя", "Роль"]
+                    self.populate_admin_table(records, headers, ["username", "role.name"])
                 elif table_name == "Роль":
                     records = session.query(Role).all()
                     headers = ["Название"]
-                    self.populate_admin_table(records, headers, ["name"], [300])
+                    self.populate_admin_table(records, headers, ["name"])
                 elif table_name == "Форматы":
                     records = session.query(EventFormat).all()
                     headers = ["Название"]
-                    self.populate_admin_table(records, headers, ["name"], [300])
+                    self.populate_admin_table(records, headers, ["name"])
                 elif table_name == "Классификации":
                     records = session.query(EventClassification).all()
                     headers = ["Название"]
-                    self.populate_admin_table(records, headers, ["name"], [300])
+                    self.populate_admin_table(records, headers, ["name"])
                 elif table_name == "Направления":
                     records = session.query(ActivityDirection).all()
                     headers = ["Название"]
-                    self.populate_admin_table(records, headers, ["name"], [300])
+                    self.populate_admin_table(records, headers, ["name"])
                 elif table_name == "Типы мероприятий":
                     records = session.query(EventType).all()
                     headers = ["Название"]
-                    self.populate_admin_table(records, headers, ["name"], [300])
+                    self.populate_admin_table(records, headers, ["name"])
                 elif table_name == "Аудитории":
                     records = session.query(TargetAudience).all()
                     headers = ["Название"]
-                    self.populate_admin_table(records, headers, ["name"], [300])
+                    self.populate_admin_table(records, headers, ["name"])
                 elif table_name == "Места проведения":
                     records = session.query(Venue).all()
                     headers = ["Название"]
-                    self.populate_admin_table(records, headers, ["name"], [300])
+                    self.populate_admin_table(records, headers, ["name"])
             except Exception as e:
                 QMessageBox.critical(self, "Ошибка", f"Не удалось обновить таблицу: {str(e)}")
 
-    def populate_admin_table(self, records, headers, attributes, col_widths=None):
+    def populate_admin_table(self, records, headers, attributes):
         self.admin_table.setRowCount(len(records))
         self.admin_table.setColumnCount(len(headers))
         self.admin_table.setHorizontalHeaderLabels(headers)
@@ -1657,14 +1617,13 @@ class MainWindow(QMainWindow):
             for col, attr in enumerate(attributes):
                 value = record
                 for part in attr.split("."):
-                    value = getattr(value, part, "")
-                item = QTableWidgetItem(str(value or ""))
-                item.setData(Qt.UserRole, record.id)
+                    value = getattr(value, part, None)
+                item = QTableWidgetItem(str(value or "-"))
+                if col == 0:
+                    item.setData(Qt.UserRole, record.id)
                 self.admin_table.setItem(row, col, item)
 
-        if col_widths:
-            for col, width in enumerate(col_widths):
-                self.admin_table.setColumnWidth(col, width)
+        self.admin_table.resizeRowsToContents()
 
     def delete_record(self):
         selected_rows = self.admin_table.selectionModel().selectedRows()
@@ -1680,30 +1639,23 @@ class MainWindow(QMainWindow):
         if reply == QMessageBox.Yes:
             with get_session() as session:
                 try:
-                    if table_name == "Расшифровка":
-                        record = session.query(Decoding).filter(Decoding.id == record_id).first()
-                    elif table_name == "Учреждение":
-                        record = session.query(Institution).filter(Institution.id == record_id).first()
-                    elif table_name == "Пользователь":
-                        record = session.query(User).filter(User.id == record_id).first()
-                    elif table_name == "Роль":
-                        record = session.query(Role).filter(Role.id == record_id).first()
-                    elif table_name == "Форматы":
-                        record = session.query(EventFormat).filter(EventFormat.id == record_id).first()
-                    elif table_name == "Классификации":
-                        record = session.query(EventClassification).filter(EventClassification.id == record_id).first()
-                    elif table_name == "Направления":
-                        record = session.query(ActivityDirection).filter(ActivityDirection.id == record_id).first()
-                    elif table_name == "Типы мероприятий":
-                        record = session.query(EventType).filter(EventType.id == record_id).first()
-                    elif table_name == "Аудитории":
-                        record = session.query(TargetAudience).filter(TargetAudience.id == record_id).first()
-                    elif table_name == "Места проведения":
-                        record = session.query(Venue).filter(Venue.id == record_id).first()
-                    else:
+                    model_class = {
+                        "Расшифровка": Decoding,
+                        "Учреждение": Institution,
+                        "Пользователь": User,
+                        "Роль": Role,
+                        "Форматы": EventFormat,
+                        "Классификации": EventClassification,
+                        "Направления": ActivityDirection,
+                        "Типы мероприятий": EventType,
+                        "Аудитории": TargetAudience,
+                        "Места проведения": Venue
+                    }.get(table_name)
+                    if not model_class:
                         QMessageBox.critical(self, "Ошибка", "Неизвестная таблица")
                         return
 
+                    record = session.query(model_class).filter(model_class.id == record_id).first()
                     if record:
                         session.delete(record)
                         session.commit()

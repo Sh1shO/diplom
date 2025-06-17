@@ -16,7 +16,7 @@ class AddEventDialog(QDialog):
         self.format_combo = QComboBox()
         self.classification_combo = QComboBox()
         self.direction_combo = QComboBox()
-        self.event_type_combo = QComboBox()  # Новое поле для формы мероприятия
+        self.event_type_combo = QComboBox()
         self.audience_combo = QComboBox()
         self.venue_combo = QComboBox()
         self.total_attendees_input = QLineEdit()
@@ -31,7 +31,7 @@ class AddEventDialog(QDialog):
         self.form_layout.addRow("Формат:", self.format_combo)
         self.form_layout.addRow("Классификация:", self.classification_combo)
         self.form_layout.addRow("Направление:", self.direction_combo)
-        self.form_layout.addRow("Форма мероприятия:", self.event_type_combo)  # Добавляем
+        self.form_layout.addRow("Форма мероприятия:", self.event_type_combo)
         self.form_layout.addRow("Аудитория:", self.audience_combo)
         self.form_layout.addRow("Место проведения:", self.venue_combo)
         self.form_layout.addRow("Всего посетителей:", self.total_attendees_input)

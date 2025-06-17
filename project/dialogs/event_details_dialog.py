@@ -17,7 +17,7 @@ class EventDetailsDialog(QDialog):
         self.format_combo = QComboBox()
         self.classification_combo = QComboBox()
         self.direction_combo = QComboBox()
-        self.event_type_combo = QComboBox()  # Новое поле
+        self.event_type_combo = QComboBox()
         self.audience_combo = QComboBox()
         self.venue_combo = QComboBox()
         self.total_attendees_input = QLineEdit()
